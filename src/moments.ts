@@ -13,7 +13,7 @@ export interface Moment {
   vodTimestamp: string | null
   vodUrl: string | null
   jumpPercent: number
-  currentRate: number
+  burst: number
   baseline: number
   vibe: string
   vibeIntensity: number
@@ -62,7 +62,7 @@ export function startMomentCapture() {
       vodTimestamp: null,
       vodUrl: null,
       jumpPercent: spike.jumpPercent,
-      currentRate: spike.currentRate,
+      burst: spike.burst,
       baseline: spike.baseline,
       vibe: spike.vibe,
       vibeIntensity: spike.vibeIntensity,
