@@ -2,4 +2,7 @@ node_modules
 .env
 dist
 .claude
+.agents
 server.log
+debug.log
+*.SKILL.md

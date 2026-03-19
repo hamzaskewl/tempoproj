@@ -2,16 +2,21 @@ import { webcrypto } from 'node:crypto'
 if (!globalThis.crypto) (globalThis as any).crypto = webcrypto
 import 'dotenv/config'
 import express from 'express'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import { Mppx, tempo } from 'mppx/express'
 import { createClient, http } from 'viem'
 import { tempo as tempoChain } from 'viem/chains'
-import { connectFirehose, getTrending, getChannel, getSpikes, getStats, isConnected, getVodTimestamp, onSpike } from './firehose.js'
-import { summarizeChannel } from './summarize.js'
+import { connectFirehose, getTrending, getChannel, getSpikes, getStats, isConnected, getVodTimestamp, onSpike, getViewerCount } from './firehose.js'
+import { summarizeChannel, classifySpike } from './summarize.js'
 import { startMomentCapture, getMoments, getMomentById } from './moments.js'
 import crypto from 'crypto'
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
 const app = express()
 app.use(express.json())
+app.use(express.static(path.join(__dirname, '..', 'public')))
 
 const PORT = process.env.PORT || 3000
 const WALLET = process.env.WALLET_ADDRESS || '0xfaad4f22fc6259646c8925203a04020e5458da6d'
@@ -28,24 +33,25 @@ const client = createClient({
 // Secret key for HMAC-binding challenges (stateless verification)
 const secretKey = process.env.PAYMENT_SECRET || crypto.randomBytes(32).toString('hex')
 
-// Create mppx payment handler
+// Create mppx payment handler (charge for one-off queries, session for streaming)
 const mppx = Mppx.create({
   methods: [
-    tempo.charge({
+    tempo({
       currency: USDC,
       recipient: WALLET as `0x${string}`,
       getClient: () => client,
+      sse: true,
     }),
   ],
   secretKey,
-  realm: 'stream-intel.local',
+  realm: 'clippy.live',
 })
 
 // --- Health / Status (free) ---
-app.get('/', (_req, res) => {
+app.get('/api', (_req, res) => {
   const stats = getStats()
   res.json({
-    service: 'Stream Intelligence API',
+    service: 'Clippy API',
     description: 'Real-time Twitch stream intelligence. Pay per query via MPP.',
     version: '1.0.0',
     status: stats.connected ? 'live' : 'connecting',
@@ -60,6 +66,7 @@ app.get('/', (_req, res) => {
       'GET /alerts': { price: 'free', description: 'SSE stream of real-time spike alerts with VOD timestamps. Query params: ?channel=name, ?clipWorthy=true' },
       'POST /moments': { price: '$0.001', description: 'All auto-captured moments with VOD links and LLM summaries' },
       'GET /moments/:id': { price: 'free', description: 'Get a specific moment by ID' },
+      'POST /watch/:channel': { price: '$0.001/spike (session)', description: 'SSE stream with LLM-classified spikes for a channel' },
     },
   })
 })
@@ -165,6 +172,61 @@ app.get('/alerts', (req, res) => {
   console.log(`[alerts] Client connected${filterChannel ? ` (filter: ${filterChannel})` : ''}${clipWorthyOnly ? ' (clip-worthy only)' : ''}`)
 })
 
+// --- Watch (session-based, pay per spike with LLM classification) ---
+app.post('/watch/:channel',
+  mppx.session({ amount: '0.001', unitType: 'spike', description: 'Watch channel for classified spikes' }),
+  async (req, res) => {
+    const channel = req.params.channel.toLowerCase()
+    const viewers = await getViewerCount(channel)
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    })
+
+    res.write(`data: ${JSON.stringify({ type: 'watching', channel, viewers })}\n\n`)
+
+    const unsubscribe = onSpike(async (spike) => {
+      if (spike.channel.toLowerCase() !== channel) return
+
+      // Classify with LLM
+      const chatSnapshot = spike.chatSnapshot || []
+      const classification = await classifySpike(chatSnapshot).catch(() => null)
+
+      const vodTimestamp = await getVodTimestamp(spike.channel, spike.spikeAt).catch(() => null)
+
+      const event = {
+        type: 'spike',
+        channel: spike.channel,
+        viewers: spike.viewers,
+        burst: spike.burst,
+        baseline: spike.baseline,
+        jumpPercent: spike.jumpPercent,
+        mood: classification?.mood || spike.vibe,
+        description: classification?.description || null,
+        vodTimestamp,
+        vodUrl: vodTimestamp ? `https://twitch.tv/${spike.channel}?t=${vodTimestamp}` : null,
+        timestamp: new Date(spike.spikeAt).toISOString(),
+      }
+
+      res.write(`data: ${JSON.stringify(event)}\n\n`)
+    })
+
+    const heartbeat = setInterval(() => {
+      res.write(`data: ${JSON.stringify({ type: 'heartbeat' })}\n\n`)
+    }, 30000)
+
+    req.on('close', () => {
+      unsubscribe()
+      clearInterval(heartbeat)
+      console.log(`[watch] ${channel} — client disconnected`)
+    })
+
+    console.log(`[watch] ${channel} — session started (${viewers ? viewers + ' viewers' : 'unknown'})`)
+  }
+)
+
 // --- Summarize (paid, calls LLM via MPP) ---
 app.post('/summarize',
   mppx.charge({ amount: '0.01', description: 'LLM chat summarization' }),
@@ -183,6 +245,19 @@ app.post('/summarize',
     }
   }
 )
+
+// --- Classify a moment (debug, uses LLM) ---
+app.get('/moments/:id/classify', async (req, res) => {
+  const moment = getMomentById(parseInt(req.params.id))
+  if (!moment) return res.status(404).json({ error: 'Moment not found' })
+
+  const result = await classifySpike(moment.chatSnapshot)
+  if (result) {
+    moment.mood = result.mood
+    moment.description = result.description
+  }
+  res.json({ channel: moment.channel, jumpPercent: moment.jumpPercent, vibe: moment.vibe, mood: result?.mood, description: result?.description, chatSnapshot: moment.chatSnapshot.slice(0, 10) })
+})
 
 // --- Moments (auto-captured spike moments) ---
 app.post('/moments',
@@ -205,7 +280,7 @@ app.get('/moments/:id', (req, res) => {
 
 // --- Start ---
 app.listen(PORT, () => {
-  console.log(`[server] Stream Intelligence API running on http://localhost:${PORT}`)
+  console.log(`[server] Clippy API running on http://localhost:${PORT}`)
   console.log(`[server] MPP payments enabled — recipient: ${WALLET}`)
   console.log(`[server] Connecting to Twitch firehose...`)
   connectFirehose()

@@ -1,13 +1,13 @@
 import { onSpike, getRecentMessages, getVodTimestamp } from './firehose.js'
+import { classifySpike } from './summarize.js'
 
 export interface Moment {
   id: number
   channel: string
   timestamp: string
   spikeAt: number
-  // Clip range — VOD timestamps for a window around the moment
-  clipStart: string | null // ~10s before spike
-  clipEnd: string | null   // ~30s after spike
+  clipStart: string | null
+  clipEnd: string | null
   clipStartUrl: string | null
   clipEndUrl: string | null
   vodTimestamp: string | null
@@ -15,12 +15,13 @@ export interface Moment {
   jumpPercent: number
   burst: number
   baseline: number
+  // LLM-classified mood + description
+  mood: string | null
+  description: string | null
+  // Legacy vibe (regex-based, kept as fallback)
   vibe: string
   vibeIntensity: number
   clipWorthy: boolean
-  summary: string | null
-  sentiment: string | null
-  topTopics: string[]
   chatSnapshot: string[]
 }
 
@@ -49,7 +50,6 @@ export function startMomentCapture() {
     const clipWorthy = spike.vibeIntensity > 10 &&
       (spike.vibe === 'hype' || spike.vibe === 'funny' || spike.vibe === 'awkward')
 
-    // Create moment immediately with what we have
     const moment: Moment = {
       id,
       channel: spike.channel,
@@ -64,31 +64,26 @@ export function startMomentCapture() {
       jumpPercent: spike.jumpPercent,
       burst: spike.burst,
       baseline: spike.baseline,
+      mood: null,
+      description: null,
       vibe: spike.vibe,
       vibeIntensity: spike.vibeIntensity,
       clipWorthy,
-      summary: null,
-      sentiment: null,
-      topTopics: [],
       chatSnapshot,
     }
 
     moments.push(moment)
     console.log(`[moments] #${id} captured: ${spike.channel} +${spike.jumpPercent}% (${spike.vibe})${clipWorthy ? ' [CLIP-WORTHY]' : ''}`)
 
-    // Enrich async — VOD timestamp + clip range + LLM summary
+    // Enrich async — VOD timestamp + clip range
     try {
       const vodTimestamp = await getVodTimestamp(spike.channel, spike.spikeAt)
       if (vodTimestamp) {
         moment.vodTimestamp = vodTimestamp
         moment.vodUrl = `https://twitch.tv/${spike.channel}?t=${vodTimestamp}`
 
-        // Calculate clip range: 10s before spike to 30s after
-        const startOffset = spike.spikeAt - 10_000 // 10s before
-        const endOffset = spike.spikeAt + 30_000   // 30s after
-
-        const startVod = await getVodTimestamp(spike.channel, startOffset)
-        const endVod = await getVodTimestamp(spike.channel, endOffset)
+        const startVod = await getVodTimestamp(spike.channel, spike.spikeAt - 10_000)
+        const endVod = await getVodTimestamp(spike.channel, spike.spikeAt + 30_000)
 
         moment.clipStart = startVod
         moment.clipEnd = endVod
@@ -97,11 +92,11 @@ export function startMomentCapture() {
       }
     } catch {}
 
-    // LLM summary disabled for now — only runs when user explicitly calls /summarize
-    // to avoid draining session key USDC on auto-captures
+    // LLM mood classification — only runs on demand (via session subscriber or API call)
+    // to avoid draining USDC on every spike
 
-    // Keep max 100 moments in memory
-    if (moments.length > 100) {
+    // Keep max 1000 moments in memory
+    if (moments.length > 1000) {
       moments.shift()
     }
   })

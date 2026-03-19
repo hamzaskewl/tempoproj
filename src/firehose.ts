@@ -174,11 +174,14 @@ setInterval(() => {
       }
     }
 
-    // Baseline: average of burst samples over last 2 min
-    // Need at least 20 samples before baseline is meaningful
+    // Baseline: average of non-zero burst samples over last 2 min
+    // Zeros = dead silence, shouldn't drag baseline down
     if (state.rateSamples.length >= 20) {
-      const sum = state.rateSamples.reduce((a, b) => a + b, 0)
-      state.baseline = sum / state.rateSamples.length
+      const active = state.rateSamples.filter(r => r > 0)
+      if (active.length >= 10) {
+        const sum = active.reduce((a, b) => a + b, 0)
+        state.baseline = sum / active.length
+      }
     }
 
     // Clean old vibes
@@ -186,7 +189,7 @@ setInterval(() => {
 
     // Spike: burst > 35% above baseline
     const warmedUp = state.rateSamples.length >= 20
-    const isSpike = warmedUp && state.burst > state.baseline * 1.35 && state.burst > 1
+    const isSpike = warmedUp && state.burst > state.baseline * 1.8 && state.burst > 1
 
     if (isSpike) {
       const wasAlreadySpiking = state.lastSpikeAt && (now - state.lastSpikeAt) < 30_000
@@ -196,22 +199,36 @@ setInterval(() => {
       }
 
       // Only emit new spike events (debounce 30s)
+      // Check viewer count — only care about streams with 1000+ viewers
       if (!wasAlreadySpiking && spikeListeners.size > 0) {
-        const vibes = getVibes(state)
-        const spike = {
-          channel: state.name,
-          spikeAt: now,
-          burst: Math.round(state.burst * 100) / 100,
-          sustained: Math.round(state.sustained * 100) / 100,
-          baseline: Math.round(state.baseline * 100) / 100,
-          jumpPercent: Math.round(((state.burst - state.baseline) / state.baseline) * 100),
-          vibe: vibes.dominant,
-          vibeIntensity: vibes.intensity,
-          clipWorthy: vibes.intensity > 10 && (vibes.dominant === 'hype' || vibes.dominant === 'funny' || vibes.dominant === 'awkward'),
-        }
-        for (const listener of spikeListeners) {
-          listener(spike)
-        }
+        const channelName = state.name
+        const burstSnap = state.burst
+        const sustainedSnap = state.sustained
+        const baselineSnap = state.baseline
+        const peakSnap = state.peakRate
+
+        getViewerCount(channelName).then(viewers => {
+          if (viewers === null || viewers < 3000) return // skip offline or small streams
+
+          const vibes = getVibes(state)
+          const chatSnapshot = state.recentMessages.slice(-30).map(m => `${m.displayName}: ${m.text}`)
+          const spike = {
+            channel: channelName,
+            spikeAt: now,
+            viewers: viewers,
+            burst: Math.round(burstSnap * 100) / 100,
+            sustained: Math.round(sustainedSnap * 100) / 100,
+            baseline: Math.round(baselineSnap * 100) / 100,
+            jumpPercent: Math.round(((burstSnap - baselineSnap) / baselineSnap) * 100),
+            vibe: vibes.dominant,
+            vibeIntensity: vibes.intensity,
+            clipWorthy: vibes.intensity > 10 && (vibes.dominant === 'hype' || vibes.dominant === 'funny' || vibes.dominant === 'awkward'),
+            chatSnapshot,
+          }
+          for (const listener of spikeListeners) {
+            listener(spike)
+          }
+        }).catch(() => {})
       }
     }
 
@@ -310,7 +327,7 @@ export function getChannel(name: string) {
   const state = channels.get(name) || channels.get(name.toLowerCase())
   if (!state) return null
 
-  const isSpike = state.rateSamples.length >= 20 && state.burst > state.baseline * 1.35 && state.burst > 1
+  const isSpike = state.rateSamples.length >= 20 && state.baseline > 3 && state.burst > state.baseline * 1.8
 
   const vibes = getVibes(state)
 
@@ -362,6 +379,40 @@ export function getRecentMessages(channelName: string, limit = 100): string[] {
   const state = channels.get(channelName) || channels.get(channelName.toLowerCase())
   if (!state) return []
   return state.recentMessages.slice(-limit).map(m => `${m.displayName}: ${m.text}`)
+}
+
+// Twitch viewer count cache
+const viewerCache = new Map<string, { viewers: number; cachedAt: number }>()
+
+export async function getViewerCount(channel: string): Promise<number | null> {
+  try {
+    const cached = viewerCache.get(channel)
+    const now = Date.now()
+
+    // Cache for 2 minutes
+    if (cached && now - cached.cachedAt < 120_000) {
+      return cached.viewers
+    }
+
+    const res = await fetch('https://gql.twitch.tv/gql', {
+      method: 'POST',
+      headers: {
+        'Client-ID': 'kimne78kx3ncx6brgo4mv6wki5h1ko',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: `query { user(login: "${channel}") { stream { viewersCount } } }`,
+      }),
+    })
+    const data = await res.json() as any
+    const viewers = data?.data?.user?.stream?.viewersCount
+    if (viewers == null) return null
+
+    viewerCache.set(channel, { viewers, cachedAt: now })
+    return viewers
+  } catch {
+    return null
+  }
 }
 
 // Twitch stream start time cache

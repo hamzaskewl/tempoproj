@@ -98,6 +98,59 @@ ${chatLog}`,
   }
 }
 
+// Quick spike classification — takes chat snapshot, returns mood + what happened
+export async function classifySpike(chatSnapshot: string[]): Promise<{
+  mood: string
+  description: string
+} | null> {
+  if (chatSnapshot.length === 0) return null
+
+  const chatLog = chatSnapshot.join('\n')
+
+  const body = {
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 150,
+    messages: [
+      {
+        role: 'user',
+        content: `Twitch chat just spiked. Classify the mood and say what happened in ONE short sentence.
+
+Moods: hype, funny, rage, clutch, awkward, wholesome, drama, shock
+
+Respond ONLY with JSON: {"mood": "...", "description": "..."}
+
+Chat:
+${chatLog}`,
+      },
+    ],
+  }
+
+  try {
+    const res = await mppClient.fetch('https://anthropic.mpp.tempo.xyz/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+    const result = await res.text()
+    const response = JSON.parse(result)
+    const text = response.content?.[0]?.text || ''
+
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0])
+      return {
+        mood: parsed.mood || 'unknown',
+        description: parsed.description || '',
+      }
+    }
+    return null
+  } catch (err: any) {
+    console.error('[classify] Error:', err.message)
+    return null
+  }
+}
+
 function buildFallbackSummary(messages: string[]) {
   const wordFreq = new Map<string, number>()
   const stopWords = new Set(['that', 'this', 'with', 'from', 'have', 'they', 'what', 'just', 'like', 'your', 'will'])
