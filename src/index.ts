@@ -3,7 +3,7 @@ import express from 'express'
 import { Mppx, tempo } from 'mppx/express'
 import { createClient, http } from 'viem'
 import { tempo as tempoChain } from 'viem/chains'
-import { connectFirehose, getTrending, getChannel, getSpikes, getStats, isConnected } from './firehose.js'
+import { connectFirehose, getTrending, getChannel, getSpikes, getStats, isConnected, getVodTimestamp, onSpike } from './firehose.js'
 import { summarizeChannel } from './summarize.js'
 import crypto from 'crypto'
 
@@ -54,6 +54,7 @@ app.get('/', (_req, res) => {
       'POST /channel': { price: '$0.001', description: 'Chat stats for a specific channel' },
       'POST /spikes': { price: '$0.002', description: 'Channels with recent chat spikes' },
       'POST /summarize': { price: '$0.01', description: 'LLM-powered summary of chat discussion' },
+      'GET /alerts': { price: 'free', description: 'SSE stream of real-time spike alerts with VOD timestamps. Query params: ?channel=name, ?clipWorthy=true' },
     },
   })
 })
@@ -88,15 +89,76 @@ app.post('/channel',
   }
 )
 
-// --- Spikes (paid) ---
+// --- Spikes (paid, with VOD timestamps) ---
 app.post('/spikes',
   mppx.charge({ amount: '0.002', description: 'Spike detection query' }),
-  (req, res) => {
+  async (req, res) => {
     const withinMinutes = req.body?.withinMinutes || 5
     const spikes = getSpikes(withinMinutes)
-    res.json({ spikes, count: spikes.length })
+
+    // Enrich with VOD timestamps
+    const enriched = await Promise.all(
+      spikes.map(async (spike) => {
+        const vodTimestamp = spike.spikeAt ? await getVodTimestamp(spike.channel, spike.spikeAt) : null
+        return {
+          ...spike,
+          vodTimestamp,
+          vodUrl: vodTimestamp ? `https://twitch.tv/${spike.channel}?t=${vodTimestamp}` : null,
+        }
+      })
+    )
+
+    res.json({ spikes: enriched, count: enriched.length })
   }
 )
+
+// --- Alerts SSE (free to connect, spike events push in real-time) ---
+app.get('/alerts', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  })
+
+  // Send initial heartbeat
+  res.write(`data: ${JSON.stringify({ type: 'connected', message: 'Listening for spikes...' })}\n\n`)
+
+  // Optional channel filter
+  const filterChannel = (req.query.channel as string)?.toLowerCase()
+  const clipWorthyOnly = req.query.clipWorthy === 'true'
+
+  const unsubscribe = onSpike(async (spike) => {
+    // Apply filters
+    if (filterChannel && spike.channel.toLowerCase() !== filterChannel) return
+    if (clipWorthyOnly && !spike.clipWorthy) return
+
+    // Add VOD timestamp
+    const vodTimestamp = await getVodTimestamp(spike.channel, spike.spikeAt)
+    const enrichedSpike = {
+      type: 'spike',
+      ...spike,
+      vodTimestamp,
+      vodUrl: vodTimestamp ? `https://twitch.tv/${spike.channel}?t=${vodTimestamp}` : null,
+      timestamp: new Date(spike.spikeAt).toISOString(),
+    }
+
+    res.write(`data: ${JSON.stringify(enrichedSpike)}\n\n`)
+  })
+
+  // Heartbeat every 30s to keep connection alive
+  const heartbeat = setInterval(() => {
+    res.write(`data: ${JSON.stringify({ type: 'heartbeat' })}\n\n`)
+  }, 30000)
+
+  // Cleanup on disconnect
+  req.on('close', () => {
+    unsubscribe()
+    clearInterval(heartbeat)
+    console.log('[alerts] Client disconnected')
+  })
+
+  console.log(`[alerts] Client connected${filterChannel ? ` (filter: ${filterChannel})` : ''}${clipWorthyOnly ? ' (clip-worthy only)' : ''}`)
+})
 
 // --- Summarize (paid, calls LLM via MPP) ---
 app.post('/summarize',
