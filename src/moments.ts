@@ -1,5 +1,4 @@
 import { onSpike, getRecentMessages, getVodTimestamp } from './firehose.js'
-import { summarizeChannel } from './summarize.js'
 
 export interface Moment {
   id: number
@@ -98,18 +97,8 @@ export function startMomentCapture() {
       }
     } catch {}
 
-    // Only call LLM for clip-worthy moments (saves USDC)
-    if (clipWorthy) {
-      try {
-        const result = await summarizeChannel(spike.channel)
-        moment.summary = result.summary
-        moment.sentiment = result.sentiment
-        moment.topTopics = result.topTopics
-        console.log(`[moments] #${id} enriched: "${result.summary.substring(0, 80)}..."`)
-      } catch (err: any) {
-        console.error(`[moments] #${id} summary failed:`, err.message)
-      }
-    }
+    // LLM summary disabled for now — only runs when user explicitly calls /summarize
+    // to avoid draining session key USDC on auto-captures
 
     // Keep max 100 moments in memory
     if (moments.length > 100) {
