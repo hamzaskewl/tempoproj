@@ -86,6 +86,7 @@ export interface ChannelState {
   // Spike detection — 10s burst vs running average
   baseline: number // running average (where 10s rate converges to)
   rate10s: number  // current 10s burst rate
+  firstSeen: number // when we first saw this channel — no spikes until warmup done
   lastSpikeAt: number | null
   peakRate: number
   // Vibe tracking — rolling scores over last 60s of messages
@@ -105,6 +106,7 @@ function getOrCreateChannel(name: string): ChannelState {
       recentMessages: [],
       baseline: 0,
       rate10s: 0,
+      firstSeen: Date.now(),
       lastSpikeAt: null,
       peakRate: 0,
       vibeWindow: [],
@@ -166,8 +168,10 @@ setInterval(() => {
     state.vibeWindow = state.vibeWindow.filter(v => v.time > cutoff)
 
     // Spike detection: 10s rate > 1.4x the running baseline (40% jump)
+    // Skip first 60s — baseline needs time to settle
+    const warmedUp = (now - state.firstSeen) > 60_000
     const spikeThreshold = Math.max(state.baseline * 1.4, 1)
-    const isSpike = state.rate10s > spikeThreshold && state.rate10s > 1
+    const isSpike = warmedUp && state.rate10s > spikeThreshold && state.rate10s > 1
 
     if (isSpike) {
       const wasAlreadySpiking = state.lastSpikeAt && (now - state.lastSpikeAt) < 30_000
