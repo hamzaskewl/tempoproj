@@ -17,19 +17,19 @@ const mppClient = Mppx.create({
       walletClient: createWalletClient({
         account,
         chain: tempoChain,
-        transport: http('https://rpc.tempo.xyz'),
+        transport: http(process.env.TEMPO_RPC || 'https://rpc.tempo.xyz'),
       }),
     }),
   ],
 })
 
 // Helper: fetch with retry on 429
-async function mppFetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
+async function mppFetchWithRetry(url: string, options: RequestInit, retries = 3): Promise<Response> {
   for (let i = 0; i <= retries; i++) {
     const res = await mppClient.fetch(url, options)
     if (res.status !== 429) return res
-    const wait = Math.min(2000 * (i + 1), 5000)
-    console.log(`[mpp] 429 rate limited, retrying in ${wait}ms...`)
+    const wait = 5000 * (i + 1) // 5s, 10s, 15s
+    console.log(`[mpp] 429 rate limited, retrying in ${wait/1000}s...`)
     await new Promise(r => setTimeout(r, wait))
   }
   return mppClient.fetch(url, options)

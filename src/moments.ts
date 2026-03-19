@@ -1,5 +1,6 @@
 import { onSpike, getRecentMessages, getVodTimestamp } from './firehose.js'
 import { classifySpike } from './summarize.js'
+import { createClip, hasTwitchAuth } from './clip.js'
 
 export interface Moment {
   id: number
@@ -22,11 +23,27 @@ export interface Moment {
   vibe: string
   vibeIntensity: number
   clipWorthy: boolean
+  clipUrl: string | null
+  clipId: string | null
   chatSnapshot: string[]
 }
 
 const moments: Moment[] = []
 let nextId = 1
+const watchedChannels = new Set<string>()
+
+export function watchChannel(channel: string) {
+  watchedChannels.add(channel.toLowerCase())
+  console.log(`[watch] Now clipping: ${channel}`)
+}
+
+export function unwatchChannel(channel: string) {
+  watchedChannels.delete(channel.toLowerCase())
+}
+
+export function getWatchedChannels() {
+  return [...watchedChannels]
+}
 
 function msToVodTime(ms: number): string {
   const hours = Math.floor(ms / 3600000)
@@ -69,11 +86,24 @@ export function startMomentCapture() {
       vibe: spike.vibe,
       vibeIntensity: spike.vibeIntensity,
       clipWorthy,
+      clipUrl: null,
+      clipId: null,
       chatSnapshot,
     }
 
     moments.push(moment)
     console.log(`[moments] #${id} captured: ${spike.channel} +${spike.jumpPercent}% (${spike.vibe})${clipWorthy ? ' [CLIP-WORTHY]' : ''}`)
+
+    // Auto-clip only for watched channels
+    if (hasTwitchAuth() && watchedChannels.has(spike.channel.toLowerCase())) {
+      createClip(spike.channel).then(clip => {
+        if (clip) {
+          moment.clipUrl = clip.clipUrl
+          moment.clipId = clip.clipId
+          console.log(`[moments] #${id} clipped: ${clip.clipUrl}`)
+        }
+      }).catch(() => {})
+    }
 
     // Enrich async — VOD timestamp + clip range
     try {

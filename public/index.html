@@ -225,7 +225,10 @@
           </div>
           <div class="spike-detail ${isOpen ? 'open' : ''}" id="detail-${s.id}">
             ${s.description ? `<div class="detail-description"><em>${s.mood}</em> — ${s.description}</div>` : ''}
-            ${!s.description ? `<button class="classify-btn" id="btn-${s.id}" onclick="event.stopPropagation(); classifyMoment('${s.id}')">classify with ai</button>` : ''}
+            <div style="display:flex;gap:8px;margin-bottom:8px">
+              ${!s.description ? `<button class="classify-btn" id="btn-${s.id}" onclick="event.stopPropagation(); classifyMoment('${s.id}')">classify with ai</button>` : ''}
+              ${s.momentId ? `<a class="classify-btn" href="/clip/${s.momentId}" target="_blank" style="text-decoration:none;display:inline-block" onclick="event.stopPropagation()">watch clip</a>` : ''}
+            </div>
             ${s.chatSnapshot ? `
               <div class="chat-snapshot">
                 ${s.chatSnapshot.map(m => {
