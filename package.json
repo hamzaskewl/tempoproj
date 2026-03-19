@@ -16,12 +16,15 @@
     "express": "^5.2.1",
     "mppx": "^0.4.7",
     "viem": "^2.47.5",
-    "ws": "^8.19.0"
+    "ws": "^8.19.0",
+    "tsx": "^4.21.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/ws": "^8.18.1",
-    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

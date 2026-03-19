@@ -83,10 +83,12 @@ export interface ChannelState {
   messageTimes: number[]
   // Last 200 messages
   recentMessages: ChatMessage[]
-  // Spike detection — 10s burst vs running average
-  baseline: number // running average (where 10s rate converges to)
+  // Spike detection
+  baseline: number // 25th percentile of rate10s samples
   rate10s: number  // current 10s burst rate
-  firstSeen: number // when we first saw this channel — no spikes until warmup done
+  rateSamples: number[] // rolling window of rate10s values (last 5 min)
+  sampleCount: number   // total samples collected (includes skipped)
+  firstSeen: number
   lastSpikeAt: number | null
   peakRate: number
   // Vibe tracking — rolling scores over last 60s of messages
@@ -106,6 +108,8 @@ function getOrCreateChannel(name: string): ChannelState {
       recentMessages: [],
       baseline: 0,
       rate10s: 0,
+      rateSamples: [],
+      sampleCount: 0,
       firstSeen: Date.now(),
       lastSpikeAt: null,
       peakRate: 0,
@@ -152,25 +156,30 @@ setInterval(() => {
     const msgs10s = state.messageTimes.filter(t => t > cutoff10s).length
     state.rate10s = msgs10s / 10
 
-    // Baseline: slow-moving average of where the 10s rate settles
-    // Uses a slow EMA (0.98) so it barely moves during spikes but tracks the real level
-    if (state.baseline === 0) {
-      state.baseline = state.rate10s
-    } else {
-      // Only update baseline when rate is NOT spiking (within 1.3x of current baseline)
-      // This prevents spikes from pulling up the baseline
-      if (state.rate10s < state.baseline * 1.3 || state.baseline < 0.5) {
-        state.baseline = state.baseline * 0.95 + state.rate10s * 0.05
+    state.sampleCount++
+
+    // Skip first 2 samples (~20s) — rate10s is meaningless early on
+    if (state.sampleCount > 2) {
+      state.rateSamples.push(state.rate10s)
+      // Keep last 5 min of samples (300 samples at 1/sec)
+      if (state.rateSamples.length > 300) {
+        state.rateSamples.shift()
       }
+    }
+
+    // Baseline: average of the rate10s samples — "what's normal for this channel"
+    // Need at least 30 samples (~30s after skip) before baseline is meaningful
+    if (state.rateSamples.length >= 30) {
+      const sum = state.rateSamples.reduce((a, b) => a + b, 0)
+      state.baseline = sum / state.rateSamples.length
     }
 
     // Clean old vibes
     state.vibeWindow = state.vibeWindow.filter(v => v.time > cutoff)
 
-    // Spike detection: 10s rate > 1.4x the running baseline (40% jump)
-    // Skip first 60s — baseline needs time to settle
-    const warmedUp = (now - state.firstSeen) > 60_000
-    const spikeThreshold = Math.max(state.baseline * 1.4, 1)
+    // Spike detection: rate10s > 2x baseline (100% jump) and baseline must be established
+    const warmedUp = state.rateSamples.length >= 30
+    const spikeThreshold = Math.max(state.baseline * 2, 1)
     const isSpike = warmedUp && state.rate10s > spikeThreshold && state.rate10s > 1
 
     if (isSpike) {

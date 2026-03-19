@@ -1,8 +1,27 @@
-import { getRecentMessages } from './firehose'
-import { execSync } from 'child_process'
-import { writeFileSync, unlinkSync } from 'fs'
-import { tmpdir } from 'os'
-import { join } from 'path'
+import { getRecentMessages } from './firehose.js'
+import { Mppx, tempo } from 'mppx/client'
+import { createWalletClient, http } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+import { tempo as tempoChain } from 'viem/chains'
+
+// Session key from `tempo wallet keys`
+const SESSION_KEY = process.env.TEMPO_SESSION_KEY || '0x68c50e09fea51bb3e113dca81a56f3c6cc5b354bdf1d4715780a9c0b2ecf1251'
+
+const account = privateKeyToAccount(SESSION_KEY as `0x${string}`)
+
+const mppClient = Mppx.create({
+  methods: [
+    tempo({
+      account,
+      deposit: '0.25',
+      walletClient: createWalletClient({
+        account,
+        chain: tempoChain,
+        transport: http('https://rpc.tempo.xyz'),
+      }),
+    }),
+  ],
+})
 
 // Call Anthropic via MPP to summarize chat
 export async function summarizeChannel(channel: string): Promise<{
@@ -40,26 +59,16 @@ ${chatLog}`,
   }
 
   try {
-    // Write JSON body to a temp file to avoid shell escaping hell
-    const tmpFile = join(tmpdir(), `tempo-req-${Date.now()}.json`)
-    writeFileSync(tmpFile, JSON.stringify(body))
-
-    // Convert Windows path to WSL path
-    const wslTmpFile = tmpFile.replace(/\\/g, '/').replace(/^([A-Z]):/, (_, d) => `/mnt/${d.toLowerCase()}`)
-
-    const cmd = `wsl -- bash -c '$HOME/.local/bin/tempo request -X POST -H "Content-Type: application/json" -d @${wslTmpFile} https://anthropic.mpp.tempo.xyz/v1/messages'`
-
     console.log('[summarize] Calling Anthropic via MPP...')
-    const result = execSync(cmd, {
-      timeout: 45000,
-      encoding: 'utf-8',
-      maxBuffer: 5 * 1024 * 1024,
+    const res = await mppClient.fetch('https://anthropic.mpp.tempo.xyz/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     })
 
-    // Clean up temp file
-    try { unlinkSync(tmpFile) } catch {}
-
+    const result = await res.text()
     console.log('[summarize] Raw response length:', result.length)
+    console.log('[summarize] Raw response:', result.substring(0, 500))
 
     // Parse Anthropic response
     const response = JSON.parse(result)
@@ -83,8 +92,6 @@ ${chatLog}`,
     }
   } catch (err: any) {
     console.error('[summarize] Error calling Anthropic via MPP:', err.message)
-    if (err.stdout) console.error('[summarize] stdout:', err.stdout?.toString().substring(0, 500))
-    if (err.stderr) console.error('[summarize] stderr:', err.stderr?.toString().substring(0, 500))
 
     // Fallback: basic local summary
     return buildFallbackSummary(messages)
