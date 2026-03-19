@@ -291,7 +291,7 @@
       return `${Math.floor(s/3600)}h`
     }
 
-    async function refreshTrending() {
+    async function refreshHealth() {
       try {
         const res = await fetch('/health')
         const health = await res.json()
@@ -302,8 +302,30 @@
       } catch {}
     }
 
+    async function refreshTrending() {
+      try {
+        const res = await fetch('/trending')
+        const data = await res.json()
+        const el = document.getElementById('trendingGrid')
+        if (!data.channels || data.channels.length === 0) {
+          el.innerHTML = '<div class="empty">no active channels yet</div>'
+          return
+        }
+        el.innerHTML = data.channels.map(ch => `
+          <div class="trending-card">
+            <div class="channel-name">${ch.channel}</div>
+            <div class="rate"><b>${ch.burst}</b> msg/s</div>
+            <div class="rate">baseline <b>${ch.baseline}</b></div>
+            <span class="vibe-tag ${ch.vibe}">${ch.vibe}</span>
+          </div>
+        `).join('')
+      } catch {}
+    }
+
     setInterval(() => renderSpikes(), 10000)
-    setInterval(refreshTrending, 5000)
+    setInterval(refreshHealth, 5000)
+    setInterval(refreshTrending, 10000)
+    refreshHealth()
     refreshTrending()
   </script>
 </body>

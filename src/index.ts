@@ -75,7 +75,12 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true, connected: isConnected(), ...getStats() })
 })
 
-// --- Trending (paid) ---
+// --- Trending (free for dashboard, top 10 only) ---
+app.get('/trending', (_req, res) => {
+  res.json(getTrending(10))
+})
+
+// --- Trending (paid, full) ---
 app.post('/trending',
   mppx.charge({ amount: '0.001', description: 'Trending channels query' }),
   (req, res) => {

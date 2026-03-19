@@ -13,7 +13,7 @@ const mppClient = Mppx.create({
   methods: [
     tempo({
       account,
-      deposit: '0.25',
+      maxDeposit: '0.25',
       walletClient: createWalletClient({
         account,
         chain: tempoChain,
@@ -22,6 +22,18 @@ const mppClient = Mppx.create({
     }),
   ],
 })
+
+// Helper: fetch with retry on 429
+async function mppFetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
+  for (let i = 0; i <= retries; i++) {
+    const res = await mppClient.fetch(url, options)
+    if (res.status !== 429) return res
+    const wait = Math.min(2000 * (i + 1), 5000)
+    console.log(`[mpp] 429 rate limited, retrying in ${wait}ms...`)
+    await new Promise(r => setTimeout(r, wait))
+  }
+  return mppClient.fetch(url, options)
+}
 
 // Call Anthropic via MPP to summarize chat
 export async function summarizeChannel(channel: string): Promise<{
@@ -60,7 +72,7 @@ ${chatLog}`,
 
   try {
     console.log('[summarize] Calling Anthropic via MPP...')
-    const res = await mppClient.fetch('https://anthropic.mpp.tempo.xyz/v1/messages', {
+    const res = await mppFetchWithRetry('https://anthropic.mpp.tempo.xyz/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -126,7 +138,7 @@ ${chatLog}`,
   }
 
   try {
-    const res = await mppClient.fetch('https://anthropic.mpp.tempo.xyz/v1/messages', {
+    const res = await mppFetchWithRetry('https://anthropic.mpp.tempo.xyz/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -147,6 +159,8 @@ ${chatLog}`,
     return null
   } catch (err: any) {
     console.error('[classify] Error:', err.message)
+    if (err.cause) console.error('[classify] Cause:', err.cause)
+    if (err.status) console.error('[classify] Status:', err.status)
     return null
   }
 }
