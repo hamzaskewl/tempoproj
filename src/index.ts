@@ -5,6 +5,7 @@ import { createClient, http } from 'viem'
 import { tempo as tempoChain } from 'viem/chains'
 import { connectFirehose, getTrending, getChannel, getSpikes, getStats, isConnected, getVodTimestamp, onSpike } from './firehose.js'
 import { summarizeChannel } from './summarize.js'
+import { startMomentCapture, getMoments, getMomentById } from './moments.js'
 import crypto from 'crypto'
 
 const app = express()
@@ -55,6 +56,8 @@ app.get('/', (_req, res) => {
       'POST /spikes': { price: '$0.002', description: 'Channels with recent chat spikes' },
       'POST /summarize': { price: '$0.01', description: 'LLM-powered summary of chat discussion' },
       'GET /alerts': { price: 'free', description: 'SSE stream of real-time spike alerts with VOD timestamps. Query params: ?channel=name, ?clipWorthy=true' },
+      'POST /moments': { price: '$0.001', description: 'All auto-captured moments with VOD links and LLM summaries' },
+      'GET /moments/:id': { price: 'free', description: 'Get a specific moment by ID' },
     },
   })
 })
@@ -179,10 +182,30 @@ app.post('/summarize',
   }
 )
 
+// --- Moments (auto-captured spike moments) ---
+app.post('/moments',
+  mppx.charge({ amount: '0.001', description: 'Captured moments query' }),
+  (req, res) => {
+    const { channel, clipWorthyOnly, limit } = req.body || {}
+    const result = getMoments({ channel, clipWorthyOnly, limit: limit || 20 })
+    res.json({ moments: result, count: result.length })
+  }
+)
+
+app.get('/moments/:id', (req, res) => {
+  const id = parseInt(req.params.id)
+  const moment = getMomentById(id)
+  if (!moment) {
+    return res.status(404).json({ error: `Moment #${id} not found` })
+  }
+  res.json(moment)
+})
+
 // --- Start ---
 app.listen(PORT, () => {
   console.log(`[server] Stream Intelligence API running on http://localhost:${PORT}`)
   console.log(`[server] MPP payments enabled — recipient: ${WALLET}`)
   console.log(`[server] Connecting to Twitch firehose...`)
   connectFirehose()
+  startMomentCapture()
 })
