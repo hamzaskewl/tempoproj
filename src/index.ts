@@ -83,7 +83,8 @@ let twitchUserToken: string | null = null
 let twitchUserId: string | null = null
 
 app.get('/auth/twitch', (req, res) => {
-  const redirect = `${req.protocol}://${req.get('host')}/auth/twitch/callback`
+  const proto = req.get('x-forwarded-proto') || req.protocol
+  const redirect = `${proto}://${req.get('host')}/auth/twitch/callback`
   const url = `https://id.twitch.tv/oauth2/authorize?client_id=${TWITCH_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirect)}&response_type=code&scope=clips:edit+editor:manage:clips`
   res.redirect(url)
 })
@@ -92,7 +93,8 @@ app.get('/auth/twitch/callback', async (req, res) => {
   const code = req.query.code as string
   if (!code) return res.status(400).send('Missing code')
 
-  const redirect = `${req.protocol}://${req.get('host')}/auth/twitch/callback`
+  const proto = req.get('x-forwarded-proto') || req.protocol
+  const redirect = `${proto}://${req.get('host')}/auth/twitch/callback`
   const tokenRes = await fetch('https://id.twitch.tv/oauth2/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
