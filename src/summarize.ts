@@ -114,6 +114,7 @@ ${chatLog}`,
 export async function classifySpike(chatSnapshot: string[]): Promise<{
   mood: string
   description: string
+  clipWorthy: boolean
 } | null> {
   if (chatSnapshot.length === 0) return null
 
@@ -125,11 +126,11 @@ export async function classifySpike(chatSnapshot: string[]): Promise<{
     messages: [
       {
         role: 'user',
-        content: `Twitch chat just spiked. Classify the mood and say what happened in ONE short sentence.
+        content: `Twitch chat just spiked. Classify the mood, say what happened in ONE short sentence, and decide if this is clip-worthy (a viewer would rewind to see this moment).
 
-Moods: hype, funny, rage, clutch, awkward, wholesome, drama, shock
+Moods: hype, funny, rage, clutch, awkward, wholesome, drama, shock, sad, neutral
 
-Respond ONLY with JSON: {"mood": "...", "description": "..."}
+Respond ONLY with JSON: {"mood": "...", "description": "...", "clipWorthy": true/false}
 
 Chat:
 ${chatLog}`,
@@ -154,6 +155,7 @@ ${chatLog}`,
       return {
         mood: parsed.mood || 'unknown',
         description: parsed.description || '',
+        clipWorthy: !!parsed.clipWorthy,
       }
     }
     return null

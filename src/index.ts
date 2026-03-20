@@ -64,7 +64,7 @@ app.get('/api', (_req, res) => {
       'POST /channel': { price: '$0.001', description: 'Chat stats for a specific channel' },
       'POST /spikes': { price: '$0.002', description: 'Channels with recent chat spikes' },
       'POST /summarize': { price: '$0.01', description: 'LLM-powered summary of chat discussion' },
-      'GET /alerts': { price: 'free', description: 'SSE stream of real-time spike alerts with VOD timestamps. Query params: ?channel=name, ?clipWorthy=true' },
+      'GET /alerts': { price: 'free', description: 'SSE stream of real-time spike alerts. Query: ?channel=name' },
       'POST /moments': { price: '$0.001', description: 'All auto-captured moments with VOD links and LLM summaries' },
       'GET /moments/:id': { price: 'free', description: 'Get a specific moment by ID' },
       'POST /watch/:channel': { price: '$0.001/spike (session)', description: 'SSE stream with LLM-classified spikes for a channel' },
@@ -282,12 +282,8 @@ app.get('/alerts', (req, res) => {
 
   // Optional channel filter
   const filterChannel = (req.query.channel as string)?.toLowerCase()
-  const clipWorthyOnly = req.query.clipWorthy === 'true'
-
   const unsubscribe = onSpike(async (spike) => {
-    // Apply filters
     if (filterChannel && spike.channel.toLowerCase() !== filterChannel) return
-    if (clipWorthyOnly && !spike.clipWorthy) return
 
     // Add VOD timestamp
     const vodTimestamp = await getVodTimestamp(spike.channel, spike.spikeAt)
@@ -314,7 +310,7 @@ app.get('/alerts', (req, res) => {
     console.log('[alerts] Client disconnected')
   })
 
-  console.log(`[alerts] Client connected${filterChannel ? ` (filter: ${filterChannel})` : ''}${clipWorthyOnly ? ' (clip-worthy only)' : ''}`)
+  console.log(`[alerts] Client connected${filterChannel ? ` (filter: ${filterChannel})` : ''}`)
 })
 
 // --- Watch (session-based, pay per spike with LLM classification) ---
@@ -350,6 +346,7 @@ app.post('/watch/:channel',
         jumpPercent: spike.jumpPercent,
         mood: classification?.mood || spike.vibe,
         description: classification?.description || null,
+        clipWorthy: classification?.clipWorthy || false,
         vodTimestamp,
         vodUrl: vodTimestamp ? `https://twitch.tv/${spike.channel}?t=${vodTimestamp}` : null,
         timestamp: new Date(spike.spikeAt).toISOString(),

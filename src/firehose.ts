@@ -222,7 +222,6 @@ setInterval(() => {
             jumpPercent: Math.round(((burstSnap - baselineSnap) / baselineSnap) * 100),
             vibe: vibes.dominant,
             vibeIntensity: vibes.intensity,
-            clipWorthy: vibes.intensity > 10 && (vibes.dominant === 'hype' || vibes.dominant === 'funny' || vibes.dominant === 'awkward'),
             chatSnapshot,
           }
           for (const listener of spikeListeners) {
@@ -369,7 +368,6 @@ export function getSpikes(withinMinutes = 5) {
         peakRate: Math.round(ch.peakRate * 100) / 100,
         vibe: vibes.dominant,
         vibeIntensity: vibes.intensity,
-        clipWorthy: vibes.intensity > 10 && (vibes.dominant === 'hype' || vibes.dominant === 'funny' || vibes.dominant === 'awkward'),
       }
     })
     .sort((a, b) => b.burst - a.burst)

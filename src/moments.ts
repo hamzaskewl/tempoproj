@@ -62,10 +62,7 @@ export function startMomentCapture() {
 
     const id = nextId++
     const chatSnapshot = getRecentMessages(spike.channel, 30)
-
-    // clipWorthy: hype, funny, OR awkward with high intensity
-    const clipWorthy = spike.vibeIntensity > 10 &&
-      (spike.vibe === 'hype' || spike.vibe === 'funny' || spike.vibe === 'awkward')
+    const isWatched = watchedChannels.has(spike.channel.toLowerCase())
 
     const moment: Moment = {
       id,
@@ -85,24 +82,38 @@ export function startMomentCapture() {
       description: null,
       vibe: spike.vibe,
       vibeIntensity: spike.vibeIntensity,
-      clipWorthy,
+      clipWorthy: false,
       clipUrl: null,
       clipId: null,
       chatSnapshot,
     }
 
     moments.push(moment)
-    console.log(`[moments] #${id} captured: ${spike.channel} +${spike.jumpPercent}% (${spike.vibe})${clipWorthy ? ' [CLIP-WORTHY]' : ''}`)
+    console.log(`[moments] #${id} captured: ${spike.channel} +${spike.jumpPercent}% (${spike.vibe})`)
 
-    // Auto-clip only for watched channels
-    if (hasTwitchAuth() && watchedChannels.has(spike.channel.toLowerCase())) {
-      createClip(spike.channel).then(clip => {
-        if (clip) {
-          moment.clipUrl = clip.clipUrl
-          moment.clipId = clip.clipId
-          console.log(`[moments] #${id} clipped: ${clip.clipUrl}`)
+    // For watched channels: LLM classifies mood + decides if clip-worthy
+    if (isWatched) {
+      try {
+        const result = await classifySpike(chatSnapshot)
+        if (result) {
+          moment.mood = result.mood
+          moment.description = result.description
+          moment.clipWorthy = result.clipWorthy
+          console.log(`[moments] #${id} LLM: ${result.mood} / clipWorthy=${result.clipWorthy} — "${result.description}"`)
+
+          // Only clip if LLM says it's worth it
+          if (result.clipWorthy && hasTwitchAuth()) {
+            const clip = await createClip(spike.channel)
+            if (clip) {
+              moment.clipUrl = clip.clipUrl
+              moment.clipId = clip.clipId
+              console.log(`[moments] #${id} clipped: ${clip.clipUrl}`)
+            }
+          }
         }
-      }).catch(() => {})
+      } catch (err: any) {
+        console.error(`[moments] #${id} classify failed:`, err.message)
+      }
     }
 
     // Enrich async — VOD timestamp + clip range
