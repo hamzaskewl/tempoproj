@@ -145,7 +145,7 @@ function processMessage(msg: ChatMessage) {
 // Clean old timestamps and update rates every second
 setInterval(() => {
   const now = Date.now()
-  const cutoff = now - 120_000 // 2 min window for message timestamps
+  const cutoff = now - 60_000 // 60s window for message timestamps
 
   let totalRate = 0
 
@@ -168,15 +168,15 @@ setInterval(() => {
     // Skip first 2 samples — burst is meaningless early on
     if (state.sampleCount > 2) {
       state.rateSamples.push(state.burst)
-      // Keep last 2 min of samples (120 samples at 1/sec)
-      if (state.rateSamples.length > 120) {
+      // Keep last 30s of samples
+      if (state.rateSamples.length > 30) {
         state.rateSamples.shift()
       }
     }
 
     // Baseline: average of non-zero burst samples over last 2 min
     // Zeros = dead silence, shouldn't drag baseline down
-    if (state.rateSamples.length >= 20) {
+    if (state.rateSamples.length >= 15) {
       const active = state.rateSamples.filter(r => r > 0)
       if (active.length >= 10) {
         const sum = active.reduce((a, b) => a + b, 0)
@@ -188,7 +188,7 @@ setInterval(() => {
     state.vibeWindow = state.vibeWindow.filter(v => v.time > cutoff)
 
     // Spike: burst > 35% above baseline
-    const warmedUp = state.rateSamples.length >= 20
+    const warmedUp = state.rateSamples.length >= 15
     const isSpike = warmedUp && state.burst > state.baseline * 1.8 && state.burst > 1
 
     if (isSpike) {
@@ -326,7 +326,7 @@ export function getChannel(name: string) {
   const state = channels.get(name) || channels.get(name.toLowerCase())
   if (!state) return null
 
-  const isSpike = state.rateSamples.length >= 20 && state.baseline > 3 && state.burst > state.baseline * 1.8
+  const isSpike = state.rateSamples.length >= 15 && state.baseline > 3 && state.burst > state.baseline * 1.8
 
   const vibes = getVibes(state)
 
