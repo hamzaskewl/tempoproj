@@ -394,9 +394,9 @@
           return `
             <div class="trending-card">
               <div class="channel-name">${ch} ${d.viewers ? `<span style="color:#444;font-size:10px">${(d.viewers/1000).toFixed(1)}k</span>` : ''}</div>
-              <div class="rate"><b>${d.burst}</b> msg/s</div>
+              <div class="rate"><b>${d.rate}</b> msg/s</div>
               <div class="rate">baseline <b>${d.baseline}</b></div>
-              <span class="vibe-tag ${d.vibe}">${d.vibe}</span>
+              ${d.isSpike ? '<div style="color:#f59e0b;font-size:10px;margin-top:2px">spiking +' + d.jumpPercent + '%</div>' : ''}
             </div>`
         } catch { return `<div class="trending-card"><div class="channel-name">${ch}</div><div class="rate" style="color:#333">connecting...</div></div>` }
       }))

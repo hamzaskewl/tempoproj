@@ -231,18 +231,19 @@ app.get('/watch-clip', (_req, res) => {
 })
 
 // --- Channel stats (free, for dashboard live display) ---
-app.get('/channel-stats/:name', (req, res) => {
+app.get('/channel-stats/:name', async (req, res) => {
   const data = getChannel(req.params.name)
   if (!data) return res.status(404).json({ error: 'Not found' })
+  const viewers = await getViewerCount(req.params.name).catch(() => null)
   res.json({
     channel: data.channel,
+    rate: data.sustained,
     burst: data.burst,
-    sustained: data.sustained,
     baseline: data.baseline,
     jumpPercent: data.jumpPercent,
     isSpike: data.isSpike,
     vibe: data.vibe,
-    viewers: null, // filled async if needed
+    viewers,
   })
 })
 
