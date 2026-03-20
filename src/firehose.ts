@@ -189,7 +189,7 @@ setInterval(() => {
 
     // Spike: burst > 35% above baseline
     const warmedUp = state.rateSamples.length >= 15
-    const isSpike = warmedUp && state.burst > state.baseline * 1.8 && state.burst > 1
+    const isSpike = warmedUp && state.burst > state.baseline * Math.max(1.5, 2.5 - (state.baseline * 0.1)) && state.burst > 1
 
     if (isSpike) {
       const wasAlreadySpiking = state.lastSpikeAt && (now - state.lastSpikeAt) < 30_000
@@ -326,7 +326,7 @@ export function getChannel(name: string) {
   const state = channels.get(name) || channels.get(name.toLowerCase())
   if (!state) return null
 
-  const isSpike = state.rateSamples.length >= 15 && state.baseline > 3 && state.burst > state.baseline * 1.8
+  const isSpike = state.rateSamples.length >= 15 && state.baseline > 3 && state.burst > state.baseline * Math.max(1.5, 2.5 - (state.baseline * 0.1))
 
   const vibes = getVibes(state)
 
