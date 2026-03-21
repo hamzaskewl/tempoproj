@@ -350,7 +350,7 @@
             </div>
             ${isOpen ? `
               <div style="margin-top:10px">
-                ${m.clipUrl ? `<div class="clip-embed" style="margin-bottom:8px"><iframe src="${m.clipUrl.replace('clips.twitch.tv', 'clips.twitch.tv/embed')}?parent=${location.hostname}&autoplay=true&muted=false" allowfullscreen></iframe></div>` : ''}
+                ${m.clipUrl ? `<div class="clip-embed" style="margin-bottom:8px"><iframe src="https://clips.twitch.tv/embed?clip=${m.clipUrl.split('/').pop()}&parent=${location.hostname}&autoplay=true&muted=false" allowfullscreen></iframe></div>` : ''}
                 ${m.description ? `<div style="font-size:12px;color:#888;margin-bottom:8px"><b>${m.mood || m.vibe}</b> — ${m.description}</div>` : ''}
                 ${m.chatSnapshot ? `<div style="font-size:11px;color:#444;line-height:1.6;padding:8px;background:#0a0a0a;border-radius:3px;max-height:120px;overflow-y:auto">${m.chatSnapshot.slice(0,12).map(msg => {
                   const idx = msg.indexOf(': ')
