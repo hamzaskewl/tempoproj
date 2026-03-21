@@ -276,22 +276,21 @@
             }
           }
 
-          // Check for clip
-          // Check for clip at 3s, 8s, 15s (clip creation takes a moment)
-          for (const delay of [3000, 8000, 15000]) {
+          // Check for clip at 4s, 10s, 18s — only add to history once
+          let clipFound = false
+          for (const delay of [4000, 10000, 18000]) {
             setTimeout(async () => {
+              if (clipFound) return
               const freshRes = await fetch(`/moments/latest/${spike.channel}`)
               if (freshRes.ok) {
                 const fresh = await freshRes.json()
                 if (fresh.clipUrl) {
+                  clipFound = true
                   setStep('clip', 'done', `
                     <a class="clip-link" href="${fresh.clipUrl}" target="_blank">${fresh.clipUrl}</a>
-                    <div class="clip-embed">
-                      <iframe src="${fresh.clipUrl.replace('clips.twitch.tv', 'clips.twitch.tv/embed')}?parent=${location.hostname}&autoplay=true&muted=true" allowfullscreen></iframe>
-                    </div>
                   `)
                   addHistory(fresh)
-                } else if (delay === 15000) {
+                } else if (delay === 18000) {
                   setStep('clip', 'done', 'clip pending — check back shortly')
                 }
               }
@@ -321,19 +320,47 @@
       setStep('clip', 'active', 'creating twitch clip...')
     }
 
+    let expandedHistory = null
+
     function addHistory(moment) {
+      // Deduplicate by moment id
+      if (moments.find(m => m.id === moment.id)) return
       moments.unshift(moment)
+      renderHistory()
+    }
+
+    function toggleHistory(id) {
+      expandedHistory = expandedHistory === id ? null : id
+      renderHistory()
+    }
+
+    function renderHistory() {
       const el = document.getElementById('historyList')
-      el.innerHTML = moments.map(m => `
-        <div class="history-item">
-          <div>
-            <span class="mood-tag ${m.mood || m.vibe}">${m.mood || m.vibe}</span>
-            <b style="color:#fff">+${m.jumpPercent}%</b>
-            ${m.description ? `<span style="color:#666;margin-left:8px">${m.description}</span>` : ''}
+      el.innerHTML = moments.map(m => {
+        const isOpen = expandedHistory === m.id
+        return `
+          <div class="history-item" onclick="toggleHistory(${m.id})" style="cursor:pointer;flex-direction:column;align-items:stretch">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <span class="mood-tag ${m.mood || m.vibe}">${m.mood || m.vibe}</span>
+                <b style="color:#fff">+${m.jumpPercent}%</b>
+                ${m.description ? `<span style="color:#666;margin-left:8px">${m.description}</span>` : ''}
+              </div>
+              ${m.clipUrl ? `<a href="${m.clipUrl}" target="_blank" onclick="event.stopPropagation()" style="color:#22c55e;font-size:11px;text-decoration:none">clip</a>` : ''}
+            </div>
+            ${isOpen ? `
+              <div style="margin-top:10px">
+                ${m.clipUrl ? `<div class="clip-embed" style="margin-bottom:8px"><iframe src="${m.clipUrl.replace('clips.twitch.tv', 'clips.twitch.tv/embed')}?parent=${location.hostname}&autoplay=true&muted=false" allowfullscreen></iframe></div>` : ''}
+                ${m.description ? `<div style="font-size:12px;color:#888;margin-bottom:8px"><b>${m.mood || m.vibe}</b> — ${m.description}</div>` : ''}
+                ${m.chatSnapshot ? `<div style="font-size:11px;color:#444;line-height:1.6;padding:8px;background:#0a0a0a;border-radius:3px;max-height:120px;overflow-y:auto">${m.chatSnapshot.slice(0,12).map(msg => {
+                  const idx = msg.indexOf(': ')
+                  return idx > -1 ? '<div><span style="color:#555">' + esc(msg.slice(0,idx)) + ':</span> ' + esc(msg.slice(idx+2)) + '</div>' : '<div>' + esc(msg) + '</div>'
+                }).join('')}</div>` : ''}
+              </div>
+            ` : ''}
           </div>
-          ${m.clipUrl ? `<a href="${m.clipUrl}" target="_blank">clip</a>` : ''}
-        </div>
-      `).join('')
+        `
+      }).join('')
     }
 
     function setStep(name, state, html) {
