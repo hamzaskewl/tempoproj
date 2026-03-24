@@ -74,6 +74,7 @@
     .method { font-weight: 600; color: #fff; }
     .method.get { color: #22c55e; }
     .method.post { color: #38bdf8; }
+    .method.delete { color: #ef4444; }
     .path { color: #ccc; }
     .price { color: #555; text-align: right; }
     .price.free { color: #22c55e; }
@@ -96,6 +97,11 @@
     .tag.mpp { background: #1a0a1a; color: #c084fc; }
     .tag.twitch { background: #0a0a1a; color: #a78bfa; }
     .tag.llm { background: #1a1a0a; color: #fbbf24; }
+    .note {
+      font-size: 11px; color: #555; padding: 8px 12px;
+      background: #0d0d0d; border-left: 2px solid #333;
+      margin: 8px 0 16px; border-radius: 0 4px 4px 0;
+    }
   </style>
 </head>
 <body>
@@ -124,7 +130,7 @@
   </div>
   <div class="flow-step">
     <div class="flow-num">3</div>
-    <div><span class="tag llm">LLM</span> On watched channels, Anthropic classifies the mood and describes what happened.</div>
+    <div><span class="tag llm">LLM</span> On watched channels, Claude classifies the mood and describes what happened.</div>
   </div>
   <div class="flow-step">
     <div class="flow-num">4</div>
@@ -132,7 +138,7 @@
   </div>
   <div class="flow-step">
     <div class="flow-num">5</div>
-    <div><span class="tag mpp">MPP</span> All paid endpoints use Tempo MPP — agents pay with USDC, no API keys</div>
+    <div><span class="tag mpp">MPP</span> All paid endpoints use Tempo MPP — agents pay with USDC, no API keys.</div>
   </div>
 
   <hr class="section-divider">
@@ -140,11 +146,15 @@
   <h2>API endpoints</h2>
 
   <h3>Free</h3>
-  <div class="endpoint"><span class="method get">GET</span> <span class="path">/</span> <span class="price free">free</span></div>
+  <div class="endpoint"><span class="method get">GET</span> <span class="path">/api</span> <span class="price free">free</span></div>
   <div class="endpoint"><span class="method get">GET</span> <span class="path">/health</span> <span class="price free">free</span></div>
   <div class="endpoint"><span class="method get">GET</span> <span class="path">/trending</span> <span class="price free">free</span></div>
   <div class="endpoint"><span class="method get">GET</span> <span class="path">/alerts</span> <span class="price free">free SSE</span></div>
   <div class="endpoint"><span class="method get">GET</span> <span class="path">/moments/:id</span> <span class="price free">free</span></div>
+  <div class="endpoint"><span class="method get">GET</span> <span class="path">/moments/latest/:channel</span> <span class="price free">free</span></div>
+  <div class="endpoint"><span class="method get">GET</span> <span class="path">/moments/:id/classify</span> <span class="price free">free</span></div>
+  <div class="endpoint"><span class="method get">GET</span> <span class="path">/channel-stats/:name</span> <span class="price free">free</span></div>
+  <div class="endpoint"><span class="method get">GET</span> <span class="path">/clip/:id</span> <span class="price free">free</span></div>
 
   <h3>Charge (one-off payment)</h3>
   <div class="endpoint"><span class="method post">POST</span> <span class="path">/trending</span> <span class="price">$0.001</span></div>
@@ -154,7 +164,21 @@
   <div class="endpoint"><span class="method post">POST</span> <span class="path">/moments</span> <span class="price">$0.001</span></div>
 
   <h3>Session (streaming payment)</h3>
-  <div class="endpoint"><span class="method post">POST</span> <span class="path">/watch/:channel</span> <span class="price session">$0.001/spike</span></div>
+  <div class="endpoint"><span class="method post">POST</span> <span class="path">/watch/:channel</span> <span class="price session">$0.03/spike</span></div>
+  <div class="note">Opens an SSE stream. Deposit USDC upfront, $0.03 deducted per spike via off-chain voucher. Unused deposit refunded on close. Auto-closes when the stream goes offline (~2 min after streamer ends).</div>
+
+  <h3>Watchlist management</h3>
+  <div class="endpoint"><span class="method post">POST</span> <span class="path">/watch-clip/:channel</span> <span class="price free">free</span></div>
+  <div class="endpoint"><span class="method delete">DELETE</span> <span class="path">/watch-clip/:channel</span> <span class="price free">free</span></div>
+  <div class="endpoint"><span class="method get">GET</span> <span class="path">/watch-clip</span> <span class="price free">free</span></div>
+
+  <h3>Channel tracking</h3>
+  <div class="endpoint"><span class="method post">POST</span> <span class="path">/track/:channel</span> <span class="price free">free</span></div>
+  <div class="endpoint"><span class="method delete">DELETE</span> <span class="path">/track/:channel</span> <span class="price free">free</span></div>
+
+  <h3>Twitch auth + clips</h3>
+  <div class="endpoint"><span class="method get">GET</span> <span class="path">/auth/twitch</span> <span class="price free">OAuth</span></div>
+  <div class="endpoint"><span class="method post">POST</span> <span class="path">/clip/:id</span> <span class="price free">free</span></div>
 
   <hr class="section-divider">
 
@@ -167,23 +191,25 @@ tempo wallet login</pre>
 
   <h3>Browse what's hot</h3>
   <pre><span class="comment"># Free — no payment needed</span>
-tempo request https://clippy.example/trending</pre>
+tempo request https://stream-intel-production.up.railway.app/trending</pre>
 
   <h3>Get channel stats (paid)</h3>
   <pre><span class="comment"># Pays $0.001 automatically via MPP</span>
 tempo request -X POST \
   -H "Content-Type: application/json" \
   -d '{"channel": "xqc"}' \
-  https://clippy.example/channel</pre>
+  https://stream-intel-production.up.railway.app/channel</pre>
 
   <h3>Watch for spikes (session)</h3>
-  <pre><span class="comment"># Opens payment channel, $0.001 per spike</span>
-<span class="comment"># LLM classifies mood + auto-clips if worthy</span>
+  <pre><span class="comment"># Opens payment channel, $0.03 per spike</span>
+<span class="comment"># LLM classifies mood + auto-clips</span>
+<span class="comment"># Auto-closes when stream ends, unused deposit refunded</span>
 tempo request -X POST \
-  https://clippy.example/watch/jynxzi</pre>
+  https://stream-intel-production.up.railway.app/watch/jynxzi</pre>
 
   <h3>Example spike response</h3>
   <pre>{
+  <span class="key">"type"</span>: <span class="str">"spike"</span>,
   <span class="key">"channel"</span>: <span class="str">"jynxzi"</span>,
   <span class="key">"viewers"</span>: <span class="num">18500</span>,
   <span class="key">"burst"</span>: <span class="num">14.2</span>,
@@ -191,8 +217,19 @@ tempo request -X POST \
   <span class="key">"jumpPercent"</span>: <span class="num">107</span>,
   <span class="key">"mood"</span>: <span class="str">"funny"</span>,
   <span class="key">"description"</span>: <span class="str">"Chat spammed SON after streamer showed off their skinny arms"</span>,
+  <span class="key">"clipWorthy"</span>: <span class="num">true</span>,
   <span class="key">"clipUrl"</span>: <span class="str">"https://clips.twitch.tv/WonderfulDifficultDragonfruitBIRB-..."</span>,
-  <span class="key">"vodUrl"</span>: <span class="str">"https://www.twitch.tv/videos/2730908290?t=2h19m19s"</span>
+  <span class="key">"vodTimestamp"</span>: <span class="str">"2h19m19s"</span>,
+  <span class="key">"vodUrl"</span>: <span class="str">"https://www.twitch.tv/videos/2730908290?t=2h19m19s"</span>,
+  <span class="key">"timestamp"</span>: <span class="str">"2026-03-24T20:15:00.000Z"</span>
+}</pre>
+
+  <h3>Stream end event</h3>
+  <p>When a streamer goes offline, watch and alert sessions auto-close after ~2 minutes:</p>
+  <pre>{
+  <span class="key">"type"</span>: <span class="str">"stream_ended"</span>,
+  <span class="key">"channel"</span>: <span class="str">"jynxzi"</span>,
+  <span class="key">"message"</span>: <span class="str">"Stream went offline. Session closed, unused deposit refunded."</span>
 }</pre>
 
   <hr class="section-divider">
@@ -201,7 +238,7 @@ tempo request -X POST \
   <p>No agent needed. Use clippy directly from the browser.</p>
 
   <h3>1. Watch the dashboard</h3>
-  <p>The <a href="/" style="color:#ccc">dashboard</a> shows live spikes streaming in from all 5,000+ channels. Click any spike to see the chat snapshot and VOD link.</p>
+  <p>The <a href="/" style="color:#ccc">dashboard</a> shows live spikes streaming in from all channels. Click any spike to see the chat snapshot and VOD link.</p>
 
   <h3>2. Add channels to watch</h3>
   <pre><span class="comment"># Add a channel to auto-clip watchlist</span>
@@ -212,7 +249,7 @@ GET /watch-clip
 
 <span class="comment"># Remove a channel</span>
 DELETE /watch-clip/jynxzi</pre>
-  <p>Watched channels get LLM-classified on every spike. Only clip-worthy moments get auto-clipped to Twitch.</p>
+  <p>Watched channels get LLM-classified on every spike and auto-clip to Twitch.</p>
 
   <h3>3. Classify any moment</h3>
   <p>Click "classify with ai" on any spike in the dashboard, or hit the API:</p>
@@ -226,7 +263,7 @@ DELETE /watch-clip/jynxzi</pre>
 }</pre>
 
   <h3>4. Connect Twitch for auto-clipping</h3>
-  <p>Visit <code>/auth/twitch</code> to authorize clip creation. Once connected, watched channels auto-clip when the AI says a moment is worth it.</p>
+  <p>Visit <code>/auth/twitch</code> to authorize clip creation. Once connected, watched channels auto-clip every spike with the AI description as the clip title.</p>
 
   <hr class="section-divider">
 
@@ -234,19 +271,19 @@ DELETE /watch-clip/jynxzi</pre>
   <p>Clippy uses <a href="https://tempo.xyz" style="color:#c084fc">Tempo MPP</a> for payments. Two models:</p>
 
   <h3>Charge (one-off)</h3>
-  <p>Agent sends request → gets 402 → pays USDC → gets response. One transaction per request.</p>
+  <p>Agent sends request &rarr; gets 402 &rarr; pays USDC &rarr; gets response. One transaction per request.</p>
 
   <h3>Session (streaming)</h3>
-  <p>Agent deposits USDC into escrow → sends off-chain vouchers per request → unused deposit refunded on close. No on-chain tx after the initial deposit.</p>
+  <p>Agent deposits USDC into escrow &rarr; $0.03 deducted per spike via off-chain voucher &rarr; unused deposit refunded when session closes. Auto-closes when stream goes offline.</p>
 
   <hr class="section-divider">
 
   <h2>Stack</h2>
   <p style="font-size:12px; color:#555;">
-    Twitch chat firehose &rarr; Node.js/Express &rarr; mppx (Tempo MPP) &rarr; Anthropic Claude (mood classification) &rarr; Twitch Helix API (auto-clip)
+    Twitch chat firehose &rarr; Node.js/Express &rarr; mppx (Tempo MPP) &rarr; Claude (mood classification) &rarr; Twitch Helix API (auto-clip)
   </p>
   <p style="font-size:12px; color:#555;">
-    Deployed on Railway. Source on <a href="https://github.com/hamzaskewl/tempoproj" style="color:#666">GitHub</a>.
+    Deployed on Railway. Built at Tempo HQ, SF &mdash; MPP Hackathon (Tempo x Stripe).
   </p>
 
 </body>
