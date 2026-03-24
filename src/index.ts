@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url'
 import { Mppx, tempo } from 'mppx/express'
 import { createClient, http } from 'viem'
 import { tempo as tempoChain } from 'viem/chains'
-import { connectFirehose, getTrending, getChannel, getSpikes, getStats, isConnected, getVodTimestamp, onSpike, getViewerCount, setActiveChannel, removeActiveChannel } from './firehose.js'
+import { connectFirehose, getTrending, getChannel, getSpikes, getStats, isConnected, getVodTimestamp, getVodUrl, isStreamLive, onSpike, getViewerCount, setActiveChannel, removeActiveChannel } from './firehose.js'
 import { summarizeChannel, classifySpike } from './summarize.js'
 import { startMomentCapture, getMoments, getMomentById, watchChannel, unwatchChannel, getWatchedChannels } from './moments.js'
 import { setTwitchAuth, getTwitchAuth, createClip } from './clip.js'
@@ -303,7 +303,7 @@ app.post('/spikes',
         return {
           ...spike,
           vodTimestamp,
-          vodUrl: vodTimestamp ? `https://twitch.tv/${spike.channel}?t=${vodTimestamp}` : null,
+          vodUrl: vodTimestamp ? await getVodUrl(spike.channel, vodTimestamp) : null,
         }
       })
     )
@@ -334,17 +334,32 @@ app.get('/alerts', (req, res) => {
       type: 'spike',
       ...spike,
       vodTimestamp,
-      vodUrl: vodTimestamp ? `https://twitch.tv/${spike.channel}?t=${vodTimestamp}` : null,
+      vodUrl: vodTimestamp ? await getVodUrl(spike.channel, vodTimestamp) : null,
       timestamp: new Date(spike.spikeAt).toISOString(),
     }
 
     res.write(`data: ${JSON.stringify(enrichedSpike)}\n\n`)
   })
 
-  // Heartbeat every 30s to keep connection alive
-  const heartbeat = setInterval(() => {
+  // Heartbeat every 30s + stream-offline check when filtering a single channel
+  let offlineStreak = 0
+  const heartbeat = setInterval(async () => {
     res.write(`data: ${JSON.stringify({ type: 'heartbeat' })}\n\n`)
-  }, 30000)
+
+    if (filterChannel) {
+      const live = await isStreamLive(filterChannel)
+      if (!live) {
+        offlineStreak++
+        if (offlineStreak >= 2) {
+          res.write(`data: ${JSON.stringify({ type: 'stream_ended', channel: filterChannel, message: 'Stream went offline.' })}\n\n`)
+          res.end()
+          return
+        }
+      } else {
+        offlineStreak = 0
+      }
+    }
+  }, 60_000)
 
   // Cleanup on disconnect
   req.on('close', () => {
@@ -391,16 +406,32 @@ app.post('/watch/:channel',
         description: classification?.description || null,
         clipWorthy: classification?.clipWorthy || false,
         vodTimestamp,
-        vodUrl: vodTimestamp ? `https://twitch.tv/${spike.channel}?t=${vodTimestamp}` : null,
+        vodUrl: vodTimestamp ? await getVodUrl(spike.channel, vodTimestamp) : null,
         timestamp: new Date(spike.spikeAt).toISOString(),
       }
 
       res.write(`data: ${JSON.stringify(event)}\n\n`)
     })
 
-    const heartbeat = setInterval(() => {
+    // Heartbeat + stream-offline check every 60s
+    let offlineStreak = 0
+    const heartbeat = setInterval(async () => {
       res.write(`data: ${JSON.stringify({ type: 'heartbeat' })}\n\n`)
-    }, 30000)
+
+      // Check if stream is still live
+      const live = await isStreamLive(channel)
+      if (!live) {
+        offlineStreak++
+        // 2 consecutive offline checks (2 min) = stream ended
+        if (offlineStreak >= 2) {
+          res.write(`data: ${JSON.stringify({ type: 'stream_ended', channel, message: 'Stream went offline. Session closed, unused deposit refunded.' })}\n\n`)
+          res.end()
+          return
+        }
+      } else {
+        offlineStreak = 0
+      }
+    }, 60_000)
 
     req.on('close', () => {
       unsubscribe()

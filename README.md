@@ -87,7 +87,7 @@ flowchart TB
 | **AI** | Claude Classification | Mood tagging, moment descriptions, clip-worthiness scoring |
 | **Clips** | Auto-Clip Creation | Automatic Twitch clips with AI-generated titles at spike timestamps |
 | **Vibes** | Chat Vibe Scoring | Pattern-matched mood detection (funny, hype, awkward, win, loss) |
-| **VOD** | Timestamp Enrichment | Deep-links to exact VOD moments with embedded player |
+| **VOD** | Direct VOD Links | Deep-links to exact VOD moments (`/videos/ID?t=1h2m3s`) with embedded player |
 | **API** | Pay-Per-Use Endpoints | Micropayment-gated access via Tempo MPP in USDC |
 | **Dashboard** | Live Monitoring UI | Real-time trending channels, active spikes, and clip feed |
 | **Alerts** | SSE Spike Stream | Server-sent events for live spike notifications, filterable by channel |

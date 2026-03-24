@@ -459,39 +459,43 @@ export async function getViewerCount(channel: string): Promise<number | null> {
   }
 }
 
-// Twitch stream start time cache
-const streamStartCache = new Map<string, { startedAt: Date; cachedAt: number }>()
+// Twitch stream start time + VOD ID cache
+const streamStartCache = new Map<string, { startedAt: Date; vodId: string | null; cachedAt: number }>()
+
+async function getStreamInfo(channel: string): Promise<{ startedAt: Date; vodId: string | null } | null> {
+  const cached = streamStartCache.get(channel)
+  const now = Date.now()
+
+  if (cached && now - cached.cachedAt < 600_000) {
+    return { startedAt: cached.startedAt, vodId: cached.vodId }
+  }
+
+  const res = await fetch('https://gql.twitch.tv/gql', {
+    method: 'POST',
+    headers: {
+      'Client-ID': 'kimne78kx3ncx6brgo4mv6wki5h1ko',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      query: `query { user(login: "${channel}") { stream { createdAt archiveVideo { id } } } }`,
+    }),
+  })
+  const data = await res.json() as any
+  const createdAt = data?.data?.user?.stream?.createdAt
+  if (!createdAt) return null
+
+  const startedAt = new Date(createdAt)
+  const vodId = data?.data?.user?.stream?.archiveVideo?.id || null
+  streamStartCache.set(channel, { startedAt, vodId, cachedAt: now })
+  return { startedAt, vodId }
+}
 
 export async function getVodTimestamp(channel: string, spikeTimestamp: number): Promise<string | null> {
   try {
-    const cached = streamStartCache.get(channel)
-    const now = Date.now()
+    const info = await getStreamInfo(channel)
+    if (!info) return null
 
-    let startedAt: Date
-
-    // Cache for 10 minutes
-    if (cached && now - cached.cachedAt < 600_000) {
-      startedAt = cached.startedAt
-    } else {
-      const res = await fetch('https://gql.twitch.tv/gql', {
-        method: 'POST',
-        headers: {
-          'Client-ID': 'kimne78kx3ncx6brgo4mv6wki5h1ko',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          query: `query { user(login: "${channel}") { stream { createdAt } } }`,
-        }),
-      })
-      const data = await res.json() as any
-      const createdAt = data?.data?.user?.stream?.createdAt
-      if (!createdAt) return null
-
-      startedAt = new Date(createdAt)
-      streamStartCache.set(channel, { startedAt, cachedAt: now })
-    }
-
-    const diffMs = spikeTimestamp - startedAt.getTime()
+    const diffMs = spikeTimestamp - info.startedAt.getTime()
     if (diffMs < 0) return null
 
     const hours = Math.floor(diffMs / 3600000)
@@ -501,6 +505,38 @@ export async function getVodTimestamp(channel: string, spikeTimestamp: number): 
     return `${hours}h${mins}m${secs}s`
   } catch {
     return null
+  }
+}
+
+// Build a proper VOD URL: https://www.twitch.tv/videos/123456?t=1h2m3s
+// Falls back to channel URL if no VOD is published
+export async function getVodUrl(channel: string, timestamp: string): Promise<string> {
+  try {
+    const info = await getStreamInfo(channel)
+    if (info?.vodId) {
+      return `https://www.twitch.tv/videos/${info.vodId}?t=${timestamp}`
+    }
+  } catch {}
+  return `https://twitch.tv/${channel}?t=${timestamp}`
+}
+
+// Check if a channel is currently live (fresh query, no cache)
+export async function isStreamLive(channel: string): Promise<boolean> {
+  try {
+    const res = await fetch('https://gql.twitch.tv/gql', {
+      method: 'POST',
+      headers: {
+        'Client-ID': 'kimne78kx3ncx6brgo4mv6wki5h1ko',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: `query { user(login: "${channel}") { stream { id } } }`,
+      }),
+    })
+    const data = await res.json() as any
+    return !!data?.data?.user?.stream?.id
+  } catch {
+    return true // assume live on error to avoid premature disconnects
   }
 }
 

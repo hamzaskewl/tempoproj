@@ -64,7 +64,7 @@ tempo request https://stream-intel-production.up.railway.app/moments/latest/jynx
   "vibe": "funny",
   "vibeIntensity": 42,
   "vodTimestamp": "2h19m19s",
-  "vodUrl": "https://twitch.tv/jynxzi?t=2h19m19s"
+  "vodUrl": "https://www.twitch.tv/videos/2730908290?t=2h19m19s"
 }
 ```
 
@@ -78,7 +78,7 @@ tempo request https://stream-intel-production.up.railway.app/moments/latest/jynx
   "mood": "funny",
   "description": "Chat spammed SON after streamer showed off their skinny arms",
   "clipUrl": "https://clips.twitch.tv/WonderfulDifficultDragonfruitBIRB-...",
-  "vodUrl": "https://twitch.tv/jynxzi?t=2h19m19s",
+  "vodUrl": "https://www.twitch.tv/videos/2730908290?t=2h19m19s",
   "chatSnapshot": ["user1: LOL", "user2: SON", "..."]
 }
 ```

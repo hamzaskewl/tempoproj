@@ -1,4 +1,4 @@
-import { onSpike, getRecentMessages, getVodTimestamp, setActiveChannel, removeActiveChannel } from './firehose.js'
+import { onSpike, getRecentMessages, getVodTimestamp, getVodUrl, setActiveChannel, removeActiveChannel } from './firehose.js'
 import { classifySpike } from './summarize.js'
 import { createClip, hasTwitchAuth } from './clip.js'
 
@@ -137,15 +137,15 @@ export function startMomentCapture() {
       const vodTimestamp = await getVodTimestamp(spike.channel, spike.spikeAt)
       if (vodTimestamp) {
         moment.vodTimestamp = vodTimestamp
-        moment.vodUrl = `https://twitch.tv/${spike.channel}?t=${vodTimestamp}`
+        moment.vodUrl = await getVodUrl(spike.channel, vodTimestamp)
 
         const startVod = await getVodTimestamp(spike.channel, spike.spikeAt - 10_000)
         const endVod = await getVodTimestamp(spike.channel, spike.spikeAt + 30_000)
 
         moment.clipStart = startVod
         moment.clipEnd = endVod
-        moment.clipStartUrl = startVod ? `https://twitch.tv/${spike.channel}?t=${startVod}` : null
-        moment.clipEndUrl = endVod ? `https://twitch.tv/${spike.channel}?t=${endVod}` : null
+        moment.clipStartUrl = startVod ? await getVodUrl(spike.channel, startVod) : null
+        moment.clipEndUrl = endVod ? await getVodUrl(spike.channel, endVod) : null
       }
     } catch {}
 
