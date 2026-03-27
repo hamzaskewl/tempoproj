@@ -315,9 +315,17 @@ export function startMomentCapture() {
     // For watched channels: classify with LLM + auto-clip
     if (isWatched) {
       try {
+        // Build streamer context for LLM
+        const context = {
+          streamer: spike.channel,
+          game: (spike as any).game || null,
+          streamTitle: (spike as any).streamTitle || null,
+          viewers: spike.viewers || null,
+        }
+
         // Use direct API if available, fallback to MPP
         const classify = hasDirectAPI() ? classifySpikeDirect : classifySpike
-        const result = await classify(chatSnapshot)
+        const result = await classify(chatSnapshot, context)
         if (result) {
           moment.mood = result.mood
           moment.description = result.description

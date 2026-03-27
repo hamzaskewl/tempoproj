@@ -9,7 +9,7 @@ import { eq } from 'drizzle-orm'
 
 // --- Direct Anthropic API (for dashboard users, free tier) ---
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || ''
-const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514'
+const ANTHROPIC_MODEL = 'claude-haiku-4-5-20251001'
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
 
 // Budget tracking (restored from DB on startup)
@@ -19,8 +19,8 @@ let totalCalls = 0
 const BUDGET_LIMIT_USD = parseFloat(process.env.LLM_BUDGET_USD || '20')
 
 function estimateCostUSD(): number {
-  // Sonnet 4 pricing: $3/1M input, $15/1M output
-  return (totalInputTokens * 3 + totalOutputTokens * 15) / 1_000_000
+  // Haiku 4.5 pricing: $0.80/1M input, $4/1M output
+  return (totalInputTokens * 0.8 + totalOutputTokens * 4) / 1_000_000
 }
 
 export function getLLMBudget() {
@@ -226,31 +226,31 @@ ${chatLog}`,
   }
 }
 
-// Quick spike classification — takes chat snapshot, returns mood + what happened
-export async function classifySpike(chatSnapshot: string[]): Promise<{
+// Quick spike classification via MPP (paid endpoint for agents)
+export async function classifySpike(chatSnapshot: string[], context?: ClassifyContext): Promise<{
   mood: string
   description: string
   clipWorthy: boolean
 } | null> {
   if (chatSnapshot.length === 0) return null
 
-  const chatLog = chatSnapshot.join('\n')
+  let userMsg = ''
+  if (context) {
+    const parts = []
+    if (context.streamer) parts.push(`Streamer: ${context.streamer}`)
+    if (context.game) parts.push(`Game: ${context.game}`)
+    if (context.streamTitle) parts.push(`Stream title: ${context.streamTitle}`)
+    if (context.viewers) parts.push(`Viewers: ${context.viewers.toLocaleString()}`)
+    if (parts.length > 0) userMsg += parts.join(' | ') + '\n\n'
+  }
+  userMsg += `Chat spike (${chatSnapshot.length} messages):\n${chatSnapshot.join('\n')}`
 
   const body = {
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-haiku-4-5-20251001',
     max_tokens: 150,
+    system: CLASSIFY_SYSTEM_PROMPT,
     messages: [
-      {
-        role: 'user',
-        content: `Twitch chat just spiked. Classify the mood, say what happened in ONE short sentence, and decide if this is clip-worthy (a viewer would rewind to see this moment).
-
-Moods: hype, funny, rage, clutch, awkward, wholesome, drama, shock, sad, neutral
-
-Respond ONLY with JSON: {"mood": "...", "description": "...", "clipWorthy": true/false}
-
-Chat:
-${chatLog}`,
-      },
+      { role: 'user', content: userMsg },
     ],
   }
 
@@ -281,37 +281,60 @@ ${chatLog}`,
     return null
   } catch (err: any) {
     console.error('[classify] Error:', err.message)
-    if (err.cause) console.error('[classify] Cause:', err.cause)
-    if (err.status) console.error('[classify] Status:', err.status)
     return null
   }
 }
 
 // --- Direct Anthropic API versions (for dashboard / free tier) ---
 
-export async function classifySpikeDirect(chatSnapshot: string[]): Promise<{
+const CLASSIFY_SYSTEM_PROMPT = `You are clippy, an AI clip detector for Twitch streams. Your job is to analyze chat activity spikes and determine what just happened on stream.
+
+You understand Twitch culture deeply — emotes (PogChamp, KEKW, OMEGALUL, LUL, Sadge, monkaS, Copium, ICANT, Catjam, GIGACHAD, D:, pepeLaugh, forsenCD, TriHard, cmonBruh, HeyGuys, NotLikeThis, BibleThump, ResidentSleeper, hasMods), 7TV emotes (LULW, Chatting, Clueless, BASED, Aware, peepoClap, widepeepoHappy, widepeepoSad, EZ, Clap, monkaW, WAYTOODANK, modCheck), BTTV (PogU, monkaHmm, pepeJam, FeelsStrongMan, HYPERS, pepeMeltdown), and FFZ emotes.
+
+You know how Twitch chat behaves — spam patterns mean excitement, copypasta means something funny/meme-worthy happened, emote-only spam means a big reaction moment, "?" spam means confusion, "L" or "W" spam means judgment calls.
+
+When classifying, focus on what the STREAMER did or what happened ON STREAM, not just what chat is doing. Chat is your signal, but the description should be about the moment itself.
+
+Rules:
+- mood must be one of: hype, funny, rage, clutch, awkward, wholesome, drama, shock, sad
+- description: ONE punchy sentence about what happened (not what chat did). Write it like a clip title a viewer would click.
+- clipWorthy: true if a viewer would genuinely want to rewatch this moment. false for routine gameplay, gifted subs, generic chat spam with no clear trigger, or boring moments.
+- Do NOT classify gifted sub sprees, subscription trains, or donation reactions as clip-worthy unless something genuinely wild happened.
+
+Respond ONLY with JSON: {"mood": "...", "description": "...", "clipWorthy": true/false}`
+
+export interface ClassifyContext {
+  streamer?: string
+  game?: string | null
+  streamTitle?: string | null
+  viewers?: number | null
+}
+
+export async function classifySpikeDirect(chatSnapshot: string[], context?: ClassifyContext): Promise<{
   mood: string
   description: string
   clipWorthy: boolean
 } | null> {
   if (chatSnapshot.length === 0) return null
 
+  let userMsg = ''
+  if (context) {
+    const parts = []
+    if (context.streamer) parts.push(`Streamer: ${context.streamer}`)
+    if (context.game) parts.push(`Game: ${context.game}`)
+    if (context.streamTitle) parts.push(`Stream title: ${context.streamTitle}`)
+    if (context.viewers) parts.push(`Viewers: ${context.viewers.toLocaleString()}`)
+    if (parts.length > 0) userMsg += parts.join(' | ') + '\n\n'
+  }
+  userMsg += `Chat spike (${chatSnapshot.length} messages):\n${chatSnapshot.join('\n')}`
+
   try {
     const response = await anthropicFetch({
       model: ANTHROPIC_MODEL,
       max_tokens: 150,
+      system: CLASSIFY_SYSTEM_PROMPT,
       messages: [
-        {
-          role: 'user',
-          content: `Twitch chat just spiked. Classify the mood, say what happened in ONE short sentence, and decide if this is clip-worthy (a viewer would rewind to see this moment).
-
-Moods: hype, funny, rage, clutch, awkward, wholesome, drama, shock, sad, neutral
-
-Respond ONLY with JSON: {"mood": "...", "description": "...", "clipWorthy": true/false}
-
-Chat:
-${chatSnapshot.join('\n')}`,
-        },
+        { role: 'user', content: userMsg },
       ],
     })
 

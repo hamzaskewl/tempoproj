@@ -263,15 +263,15 @@ setInterval(() => {
         const baselineSnap = state.baseline
         const peakSnap = state.peakRate
 
-        getViewerCount(channelName).then(viewers => {
-          if (viewers === null || viewers < 3000) return // skip offline or small streams
+        getStreamContext(channelName).then(ctx => {
+          if (!ctx || ctx.viewers < 500) return // skip offline or small streams
 
           const vibes = getVibes(state)
           const chatSnapshot = state.recentMessages.slice(-50).map(m => `${m.displayName}: ${m.text}`)
           const spike = {
             channel: channelName,
             spikeAt: now,
-            viewers: viewers,
+            viewers: ctx.viewers,
             burst: Math.round(burstSnap * 100) / 100,
             sustained: Math.round(sustainedSnap * 100) / 100,
             baseline: Math.round(baselineSnap * 100) / 100,
@@ -279,6 +279,8 @@ setInterval(() => {
             vibe: vibes.dominant,
             vibeIntensity: vibes.intensity,
             chatSnapshot,
+            game: ctx.game,
+            streamTitle: ctx.title,
           }
           for (const listener of spikeListeners) {
             listener(spike)
@@ -437,17 +439,22 @@ export function getRecentMessages(channelName: string, limit = 100): string[] {
     .map(m => `${m.displayName}: ${m.text}`)
 }
 
-// Twitch viewer count cache
-const viewerCache = new Map<string, { viewers: number; cachedAt: number }>()
+// Twitch stream context cache (viewers, game, title)
+export interface StreamContext {
+  viewers: number
+  game: string | null
+  title: string | null
+}
 
-export async function getViewerCount(channel: string): Promise<number | null> {
+const streamContextCache = new Map<string, { ctx: StreamContext; cachedAt: number }>()
+
+export async function getStreamContext(channel: string): Promise<StreamContext | null> {
   try {
-    const cached = viewerCache.get(channel)
+    const cached = streamContextCache.get(channel)
     const now = Date.now()
 
-    // Cache for 2 minutes
     if (cached && now - cached.cachedAt < 120_000) {
-      return cached.viewers
+      return cached.ctx
     }
 
     const res = await fetch('https://gql.twitch.tv/gql', {
@@ -457,18 +464,28 @@ export async function getViewerCount(channel: string): Promise<number | null> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        query: `query { user(login: "${channel}") { stream { viewersCount } } }`,
+        query: `query { user(login: "${channel}") { stream { viewersCount game { displayName } title } } }`,
       }),
     })
     const data = await res.json() as any
-    const viewers = data?.data?.user?.stream?.viewersCount
-    if (viewers == null) return null
+    const stream = data?.data?.user?.stream
+    if (!stream) return null
 
-    viewerCache.set(channel, { viewers, cachedAt: now })
-    return viewers
+    const ctx: StreamContext = {
+      viewers: stream.viewersCount || 0,
+      game: stream.game?.displayName || null,
+      title: stream.title || null,
+    }
+    streamContextCache.set(channel, { ctx, cachedAt: now })
+    return ctx
   } catch {
     return null
   }
+}
+
+export async function getViewerCount(channel: string): Promise<number | null> {
+  const ctx = await getStreamContext(channel)
+  return ctx?.viewers ?? null
 }
 
 // Twitch stream start time + VOD ID cache
