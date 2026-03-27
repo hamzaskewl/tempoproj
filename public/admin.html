@@ -212,7 +212,7 @@
     .empty-row td { color: #222; text-align: center; padding: 24px; }
   </style>
 </head>
-<body>
+<body style="visibility:hidden">
   <div class="topbar">
     <div class="topbar-left">
       <div class="logo">clippy</div>
@@ -295,6 +295,7 @@
         av.src = d.user.profileImage
         av.style.display = 'block'
       }
+      document.body.style.visibility = 'visible'
       loadAll()
     }).catch(() => window.location.href = '/login.html')
 
