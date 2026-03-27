@@ -352,6 +352,23 @@ app.post('/my/channels/:channel/confirm', requireAuth, async (req, res) => {
   res.json({ channels, maxChannels: 3 })
 })
 
+// --- Per-user moments (all moments for user's channels) ---
+app.get('/my/moments', requireAuth, async (req, res) => {
+  const channels = await getUserChannels((req as any).user.id)
+  const channelNames = channels.map(c => c.channel)
+  if (channelNames.length === 0) return res.json({ moments: [] })
+
+  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200)
+  const allMoments = []
+  for (const ch of channelNames) {
+    const m = await getMoments({ channel: ch, limit })
+    allMoments.push(...m)
+  }
+  // Sort by spikeAt descending
+  allMoments.sort((a, b) => b.spikeAt - a.spikeAt)
+  res.json({ moments: allMoments.slice(0, limit), channels: channelNames })
+})
+
 // --- Create a clip for a moment ---
 app.post('/clip/:id', requireAuth, async (req, res) => {
   const moment = await getMomentById(parseInt(req.params.id))

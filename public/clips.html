@@ -189,7 +189,13 @@
     <div class="section-title">top channels</div>
     <div class="top-channels" id="topChannels"></div>
 
-    <div class="section-title">recent clips</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0">
+      <div class="section-title" style="margin-bottom:0">recent clips</div>
+      <label id="myClipsToggle" style="display:none;font-size:11px;color:#555;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="myClipsOnly" onchange="toggleMyClips()" style="accent-color:#9146ff;cursor:pointer">
+        my channels only
+      </label>
+    </div>
     <div class="clips-grid" id="clipsGrid">
       <div class="empty">loading...</div>
     </div>
@@ -202,8 +208,10 @@
   <script>
     let currentUser = null
     let allClips = []
+    let myChannels = []
     let offset = 0
     let filterChannel = null
+    let myClipsOnly = false
 
     // Auth check
     fetch('/auth/me').then(r => r.json()).then(d => {
@@ -222,6 +230,13 @@
         a.textContent = 'admin'
         nav.appendChild(a)
       }
+      // Load user's channels for "my clips" filter
+      fetch('/my/channels').then(r => r.json()).then(data => {
+        myChannels = (data.channels || []).map(c => c.channel)
+        if (myChannels.length > 0) {
+          document.getElementById('myClipsToggle').style.display = 'flex'
+        }
+      }).catch(() => {})
       loadClips()
     }).catch(() => window.location.href = '/login.html')
 
@@ -252,11 +267,16 @@
       } catch {}
     }
 
+    function toggleMyClips() {
+      myClipsOnly = document.getElementById('myClipsOnly').checked
+      renderClips()
+    }
+
     function renderClips() {
       const grid = document.getElementById('clipsGrid')
-      const filtered = filterChannel
-        ? allClips.filter(c => c.channel === filterChannel)
-        : allClips
+      let filtered = allClips
+      if (filterChannel) filtered = filtered.filter(c => c.channel === filterChannel)
+      if (myClipsOnly && myChannels.length > 0) filtered = filtered.filter(c => myChannels.includes(c.channel.toLowerCase()))
 
       if (filtered.length === 0) {
         grid.innerHTML = '<div class="empty">no clips yet — watch some channels to start capturing</div>'

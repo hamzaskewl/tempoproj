@@ -213,6 +213,25 @@
     }
     .chat-snapshot .u { color: #555; }
 
+    /* Clip embed */
+    .clip-embed {
+      width: 100%; aspect-ratio: 16/9; border-radius: 6px; overflow: hidden;
+      margin-top: 12px; background: #0a0a0a;
+    }
+    .clip-embed iframe { width: 100%; height: 100%; border: none; }
+    .embed-toggle {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 10px; color: #555; cursor: pointer; user-select: none;
+      padding: 4px 10px; background: #1a1a1a; border: 1px solid #222;
+      border-radius: 4px; font-family: inherit;
+    }
+    .embed-toggle:hover { background: #222; color: #999; }
+    .embed-toggle .toggle-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: #333;
+      transition: background 0.15s;
+    }
+    .embed-toggle.on .toggle-dot { background: #22c55e; }
+
     /* ─── Sidebar ─── */
     .sidebar-section { margin-bottom: 28px; }
     .ch-card {
@@ -303,8 +322,15 @@
         <div class="slot-card empty-slot">loading your channels...</div>
       </div>
 
-      <!-- Live spikes from your channels -->
-      <div class="section-title">your live spikes <span class="count" id="spikesBadge">0</span></div>
+      <!-- Moments from your channels -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="section-title" style="margin-bottom:0">your moments <span class="count" id="spikesBadge">0</span></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <select id="channelFilter" onchange="renderSpikes()" style="background:#111;border:1px solid #1a1a1a;border-radius:4px;color:#888;font-family:inherit;font-size:11px;padding:4px 8px;outline:none">
+            <option value="">all channels</option>
+          </select>
+        </div>
+      </div>
       <div class="spikes-list" id="spikesList">
         <div class="empty"><span class="pulse">add channels above to start watching</span></div>
       </div>
@@ -331,6 +357,7 @@
     let userChannels = []
     const spikes = []
     let expandedId = null
+    const embedVisible = new Set()
 
     // ─── Auth gate ───
     fetch('/auth/me').then(r => r.json()).then(d => {
@@ -355,7 +382,7 @@
     function init() {
       loadChannels()
 
-      // SSE for spikes
+      // SSE for live spikes
       const sse = new EventSource('/alerts')
       sse.onmessage = (e) => {
         const data = JSON.parse(e.data)
@@ -364,17 +391,15 @@
           document.getElementById('statusText').textContent = 'live'
         }
         if (data.type === 'spike') {
-          // Only show spikes from user's channels
           const myChannels = userChannels.map(c => c.channel)
           if (myChannels.length > 0 && !myChannels.includes(data.channel.toLowerCase())) return
           if (myChannels.length === 0) return
 
-          const id = Date.now() + '' + Math.random()
+          const id = 'live-' + Date.now() + Math.random()
           spikes.unshift({ ...data, id, receivedAt: Date.now(), mood: null, description: null, chatSnapshot: data.chatSnapshot || null, clipUrl: null })
-          if (spikes.length > 30) spikes.pop()
+          dedupeSpikes()
           renderSpikes()
 
-          // Fetch moment details
           setTimeout(() => fetchMoment(id, data.channel), 4000)
           setTimeout(() => fetchMoment(id, data.channel), 10000)
         }
@@ -384,14 +409,12 @@
         document.getElementById('statusText').textContent = 'disconnected'
       }
 
-      setInterval(() => renderSpikes(), 10000)
       setInterval(refreshHealth, 5000)
       setInterval(refreshTrending, 15000)
       setInterval(refreshChannelStats, 3000)
-      setInterval(loadChannels, 30000) // refresh slots periodically
+      setInterval(loadChannels, 30000)
       refreshHealth()
       refreshTrending()
-      loadRecentMoments()
     }
 
     // ─── Channel management ───
@@ -403,15 +426,26 @@
         const data = await res.json()
         userChannels = data.channels || []
         renderSlots()
+        updateChannelFilter()
         refreshChannelStats()
+        loadMomentsFromDB()
       } catch {}
+    }
+
+    function updateChannelFilter() {
+      const select = document.getElementById('channelFilter')
+      const current = select.value
+      select.innerHTML = '<option value="">all channels</option>'
+      const channels = [...new Set(userChannels.map(c => c.channel))]
+      for (const ch of channels) {
+        select.innerHTML += `<option value="${ch}" ${current === ch ? 'selected' : ''}>${ch}</option>`
+      }
     }
 
     function renderSlots() {
       const el = document.getElementById('channelSlots')
       document.getElementById('slotUsed').textContent = userChannels.length
 
-      // Disable add if at max
       const addBtn = document.getElementById('addBtn')
       const addInput = document.getElementById('channelInput')
       if (userChannels.length >= 3) {
@@ -453,11 +487,9 @@
         </div>
       `).join('')
 
-      // Fill remaining empty slots
       for (let i = userChannels.length; i < 3; i++) {
         html += `<div class="slot-card empty-slot">slot ${i + 1} — empty</div>`
       }
-
       el.innerHTML = html
     }
 
@@ -467,7 +499,6 @@
       input.value = ''
       if (!ch) return
       hideError()
-
       try {
         const res = await fetch('/my/channels', {
           method: 'POST',
@@ -478,12 +509,9 @@
         if (!res.ok) { showError(data.error || 'Failed to add channel'); return }
         userChannels = data.channels || []
         renderSlots()
-
-        // Also start tracking for live stats
+        updateChannelFilter()
         fetch(`/track/${ch}`, { method: 'POST' })
-      } catch (err) {
-        showError('Failed to add channel')
-      }
+      } catch { showError('Failed to add channel') }
     }
 
     async function removeChannel(ch) {
@@ -493,6 +521,7 @@
         const data = await res.json()
         userChannels = data.channels || []
         renderSlots()
+        updateChannelFilter()
         fetch(`/track/${ch}`, { method: 'DELETE' })
       } catch {}
     }
@@ -502,15 +531,10 @@
       try {
         const res = await fetch(`/my/channels/${ch}/confirm`, { method: 'POST' })
         const data = await res.json()
-        if (!res.ok) {
-          showError(data.error || 'Failed to confirm')
-          return
-        }
+        if (!res.ok) { showError(data.error || 'Failed to confirm'); return }
         userChannels = data.channels || []
         renderSlots()
-      } catch {
-        showError('Failed to confirm channel')
-      }
+      } catch { showError('Failed to confirm channel') }
     }
 
     function showError(msg) {
@@ -519,28 +543,86 @@
       el.style.display = 'block'
       setTimeout(hideError, 5000)
     }
-    function hideError() {
-      document.getElementById('errorMsg').style.display = 'none'
+    function hideError() { document.getElementById('errorMsg').style.display = 'none' }
+
+    // ─── Load moments from DB ───
+    async function loadMomentsFromDB() {
+      try {
+        const res = await fetch('/my/moments?limit=100')
+        if (!res.ok) return
+        const data = await res.json()
+        for (const m of (data.moments || [])) {
+          // Skip if already have this moment (from SSE)
+          if (spikes.some(s => s.dbId === m.id)) continue
+          spikes.push({
+            id: 'db-' + m.id,
+            dbId: m.id,
+            channel: m.channel,
+            jumpPercent: m.jumpPercent,
+            viewers: null,
+            vibe: m.vibe,
+            mood: m.mood,
+            description: m.description,
+            chatSnapshot: m.chatSnapshot || [],
+            clipUrl: m.clipUrl,
+            clipId: m.clipId,
+            vodUrl: m.vodUrl,
+            vodTimestamp: m.vodTimestamp,
+            receivedAt: m.spikeAt,
+            type: 'spike',
+          })
+        }
+        dedupeSpikes()
+        renderSpikes()
+      } catch {}
     }
 
-    // ─── Spikes ───
+    function dedupeSpikes() {
+      // Remove dupes by channel+time proximity (within 30s)
+      const seen = []
+      for (let i = spikes.length - 1; i >= 0; i--) {
+        const s = spikes[i]
+        const dupe = seen.find(x => x.channel === s.channel && Math.abs(x.receivedAt - s.receivedAt) < 30000)
+        if (dupe) {
+          // Keep the one with more data
+          if ((s.mood || s.clipUrl) && !dupe.mood && !dupe.clipUrl) {
+            const idx = spikes.indexOf(dupe)
+            if (idx > -1) spikes.splice(idx, 1)
+            seen.push(s)
+          } else {
+            spikes.splice(i, 1)
+          }
+        } else {
+          seen.push(s)
+        }
+      }
+      spikes.sort((a, b) => b.receivedAt - a.receivedAt)
+    }
 
+    // ─── Render moments ───
     function renderSpikes() {
       const el = document.getElementById('spikesList')
-      document.getElementById('spikesBadge').textContent = spikes.length
+      const filter = document.getElementById('channelFilter').value
 
-      if (spikes.length === 0) {
+      let filtered = filter ? spikes.filter(s => s.channel.toLowerCase() === filter) : spikes
+      document.getElementById('spikesBadge').textContent = filtered.length
+
+      if (filtered.length === 0) {
         const myChannels = userChannels.filter(c => c.confirmed).map(c => c.channel)
         el.innerHTML = myChannels.length === 0
           ? '<div class="empty"><span class="pulse">add and confirm channels to start watching</span></div>'
-          : `<div class="empty"><span class="pulse">watching ${myChannels.join(', ')}...</span></div>`
+          : `<div class="empty"><span class="pulse">watching ${myChannels.join(', ')} — no moments yet</span></div>`
         return
       }
-      el.innerHTML = spikes.map(s => {
+
+      el.innerHTML = filtered.map(s => {
         const jumpClass = s.jumpPercent > 150 ? 'mega' : s.jumpPercent > 50 ? 'high' : ''
         const ago = timeAgo(s.receivedAt)
         const moodTag = s.mood || s.vibe
         const isOpen = expandedId === s.id
+        const showEmbed = embedVisible.has(s.id)
+        const clipSlug = s.clipUrl ? s.clipUrl.split('/').pop() : null
+
         return `
           <div class="spike-card ${s.clipUrl ? 'has-clip' : ''}" onclick="toggleSpike('${s.id}')">
             <div class="channel-col">
@@ -555,10 +637,12 @@
           <div class="spike-detail ${isOpen ? 'open' : ''}" id="detail-${s.id}">
             <div class="detail-actions">
               ${s.clipUrl ? `<a class="clip-link" href="${s.clipUrl}" target="_blank" onclick="event.stopPropagation()">view clip</a>` : ''}
+              ${clipSlug ? `<span class="embed-toggle ${showEmbed ? 'on' : ''}" onclick="event.stopPropagation();toggleEmbed('${s.id}')"><span class="toggle-dot"></span>${showEmbed ? 'hide clip' : 'show clip'}</span>` : ''}
               ${s.vodUrl ? `<a href="${s.vodUrl}" target="_blank" onclick="event.stopPropagation()">vod</a>` : ''}
             </div>
             ${s.description ? `<div class="detail-desc"><b>${esc(s.mood || '')}</b> — ${esc(s.description)}</div>` : ''}
-            ${s.chatSnapshot ? `
+            ${showEmbed && clipSlug ? `<div class="clip-embed"><iframe src="https://clips.twitch.tv/embed?clip=${clipSlug}&parent=${location.hostname}" allowfullscreen></iframe></div>` : ''}
+            ${s.chatSnapshot && s.chatSnapshot.length > 0 ? `
               <div class="chat-snapshot">
                 ${s.chatSnapshot.slice(0, 15).map(m => {
                   const idx = m.indexOf(': ')
@@ -567,10 +651,16 @@
                     : `<div>${esc(m)}</div>`
                 }).join('')}
               </div>
-            ` : '<div style="color:#222;font-size:11px">loading chat...</div>'}
+            ` : ''}
           </div>
         `
       }).join('')
+    }
+
+    function toggleEmbed(id) {
+      if (embedVisible.has(id)) embedVisible.delete(id)
+      else embedVisible.add(id)
+      renderSpikes()
     }
 
     async function fetchMoment(spikeId, channel) {
@@ -607,7 +697,6 @@
           if (!res.ok) return `<div class="ch-card"><div class="ch-top"><span class="ch-name">${esc(ch.channel)}</span></div><div class="ch-stats" style="color:#222">warming up...</div></div>`
           const d = await res.json()
 
-          // Update live status in slot card
           const liveDot = document.getElementById(`live-${ch.channel}`)
           const statusEl = document.getElementById(`status-${ch.channel}`)
           const statsEl = document.getElementById(`stats-${ch.channel}`)
@@ -663,46 +752,15 @@
       addChannel()
     }
 
-    // ─── Load saved moments from DB ───
-    async function loadRecentMoments() {
-      if (userChannels.length === 0) return
-      for (const ch of userChannels) {
-        try {
-          const res = await fetch(`/moments/latest/${ch.channel}`)
-          if (!res.ok) continue
-          const m = await res.json()
-          // Don't duplicate if already in spikes from SSE
-          if (spikes.some(s => s.channel.toLowerCase() === m.channel.toLowerCase() && Math.abs(s.receivedAt - m.spikeAt) < 60000)) continue
-          spikes.push({
-            id: 'db-' + m.id,
-            channel: m.channel,
-            jumpPercent: m.jumpPercent,
-            viewers: null,
-            vibe: m.vibe,
-            mood: m.mood,
-            description: m.description,
-            chatSnapshot: m.chatSnapshot,
-            clipUrl: m.clipUrl,
-            vodUrl: m.vodUrl,
-            vodTimestamp: m.vodTimestamp,
-            receivedAt: m.spikeAt,
-            type: 'spike',
-          })
-        } catch {}
-      }
-      spikes.sort((a, b) => b.receivedAt - a.receivedAt)
-      if (spikes.length > 30) spikes.length = 30
-      renderSpikes()
-    }
-
     // ─── Utilities ───
 
     function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML }
     function timeAgo(ts) {
       const s = Math.floor((Date.now() - ts) / 1000)
-      if (s < 60) return `${s}s`
-      if (s < 3600) return `${Math.floor(s/60)}m`
-      return `${Math.floor(s/3600)}h`
+      if (s < 60) return `${s}s ago`
+      if (s < 3600) return `${Math.floor(s/60)}m ago`
+      if (s < 86400) return `${Math.floor(s/3600)}h ago`
+      return `${Math.floor(s/86400)}d ago`
     }
 
     async function logout() {
