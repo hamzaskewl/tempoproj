@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>clippy — clips</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+      background: #0a0a0a;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+
+    /* Topbar */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 32px;
+      border-bottom: 1px solid #141414;
+      background: #0d0d0d;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .topbar-left { display: flex; align-items: center; gap: 24px; }
+    .logo { font-size: 15px; font-weight: 600; letter-spacing: 0.5px; }
+    .topbar nav a {
+      font-size: 12px; color: #444; text-decoration: none; margin-left: 16px;
+      padding: 4px 0; border-bottom: 2px solid transparent;
+    }
+    .topbar nav a:hover { color: #999; }
+    .topbar nav a.active { color: #e0e0e0; border-bottom-color: #9146ff; }
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    .topbar-right .user-name { font-size: 12px; color: #666; }
+    .topbar-right .avatar { width: 24px; height: 24px; border-radius: 50%; }
+    .logout-btn {
+      background: none; border: 1px solid #222; color: #555; font-family: inherit;
+      font-size: 11px; padding: 4px 12px; border-radius: 4px; cursor: pointer;
+    }
+    .logout-btn:hover { border-color: #444; color: #999; }
+
+    /* Container */
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 32px;
+    }
+
+    /* Stats bar */
+    .stats-bar {
+      display: flex;
+      gap: 32px;
+      margin-bottom: 32px;
+      padding: 20px 0;
+      border-bottom: 1px solid #111;
+    }
+    .stat-item .val { font-size: 28px; font-weight: 700; color: #fff; }
+    .stat-item .lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: #444; margin-top: 2px; }
+
+    /* Top channels */
+    .top-channels {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+    }
+    .top-ch {
+      font-size: 11px;
+      padding: 6px 14px;
+      background: #111;
+      border: 1px solid #1a1a1a;
+      border-radius: 20px;
+      color: #888;
+      cursor: pointer;
+    }
+    .top-ch:hover { border-color: #333; color: #fff; }
+    .top-ch .count { color: #444; margin-left: 4px; }
+    .top-ch.active { border-color: #9146ff; color: #9146ff; }
+
+    .section-title {
+      font-size: 10px; font-weight: 500; text-transform: uppercase;
+      letter-spacing: 2px; color: #444; margin-bottom: 16px;
+    }
+
+    /* Clips grid */
+    .clips-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .clip-card {
+      background: #111;
+      border: 1px solid #1a1a1a;
+      border-radius: 8px;
+      overflow: hidden;
+      transition: border-color 0.15s;
+    }
+    .clip-card:hover { border-color: #333; }
+    .clip-embed {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #0a0a0a;
+    }
+    .clip-embed iframe { width: 100%; height: 100%; border: none; }
+    .clip-info { padding: 14px 16px; }
+    .clip-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .clip-channel { font-size: 13px; font-weight: 600; color: #fff; }
+    .clip-jump { font-size: 12px; font-weight: 700; }
+    .clip-jump.high { color: #22c55e; }
+    .clip-jump.mega { color: #f59e0b; }
+    .clip-meta { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+    .vibe-tag {
+      font-size: 10px; padding: 3px 8px; border-radius: 4px;
+      font-weight: 500;
+    }
+    .vibe-tag.funny { background: #1a1a0a; color: #fbbf24; }
+    .vibe-tag.hype { background: #0a1a0a; color: #22c55e; }
+    .vibe-tag.awkward { background: #1a0a1a; color: #c084fc; }
+    .vibe-tag.win { background: #0a1a1a; color: #38bdf8; }
+    .vibe-tag.loss { background: #1a0a0a; color: #f87171; }
+    .vibe-tag.rage { background: #1a0a0a; color: #ef4444; }
+    .vibe-tag.shock { background: #1a1a0a; color: #fb923c; }
+    .vibe-tag.clutch { background: #0a1a0a; color: #34d399; }
+    .vibe-tag.wholesome { background: #0a1a1a; color: #67e8f9; }
+    .vibe-tag.drama { background: #1a0a1a; color: #e879f9; }
+    .vibe-tag.sad { background: #1a0a0a; color: #f87171; }
+    .vibe-tag.neutral { background: #1a1a1a; color: #555; }
+    .clip-time { font-size: 10px; color: #333; }
+    .clip-desc { font-size: 12px; color: #666; line-height: 1.5; }
+    .clip-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .clip-actions a {
+      font-size: 10px; padding: 4px 10px; background: #1a1a1a; color: #666;
+      border: 1px solid #222; border-radius: 4px; text-decoration: none; font-family: inherit;
+    }
+    .clip-actions a:hover { background: #222; color: #999; }
+    .clip-actions a.primary { color: #22c55e; border-color: #22c55e44; }
+
+    /* Load more */
+    .load-more {
+      display: flex;
+      justify-content: center;
+      padding: 24px 0;
+    }
+    .load-more button {
+      background: #1a1a1a; color: #666; border: 1px solid #222;
+      border-radius: 6px; padding: 10px 32px; font-family: inherit;
+      font-size: 12px; cursor: pointer;
+    }
+    .load-more button:hover { background: #222; color: #999; }
+
+    .empty { color: #222; font-size: 12px; text-align: center; padding: 48px 0; }
+
+    @media (max-width: 768px) {
+      .topbar { padding: 14px 16px; }
+      .container { padding: 20px 16px; }
+      .clips-grid { grid-template-columns: 1fr; }
+      .stats-bar { gap: 16px; flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="logo">clippy</div>
+      <nav id="navLinks">
+        <a href="/">dashboard</a>
+        <a href="/clips.html" class="active">clips</a>
+      </nav>
+    </div>
+    <div class="topbar-right">
+      <img class="avatar" id="userAvatar" src="" alt="" style="display:none">
+      <span class="user-name" id="userName"></span>
+      <button class="logout-btn" onclick="logout()">logout</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="stats-bar" id="statsBar">
+      <div class="stat-item"><div class="val" id="statTotal">-</div><div class="lbl">total moments</div></div>
+      <div class="stat-item"><div class="val" id="statClipped">-</div><div class="lbl">clips created</div></div>
+      <div class="stat-item"><div class="val" id="statRate">-</div><div class="lbl">clip rate</div></div>
+    </div>
+
+    <div class="section-title">top channels</div>
+    <div class="top-channels" id="topChannels"></div>
+
+    <div class="section-title">recent clips</div>
+    <div class="clips-grid" id="clipsGrid">
+      <div class="empty">loading...</div>
+    </div>
+
+    <div class="load-more" id="loadMore" style="display:none">
+      <button onclick="loadMore()">load more</button>
+    </div>
+  </div>
+
+  <script>
+    let currentUser = null
+    let allClips = []
+    let offset = 0
+    let filterChannel = null
+
+    // Auth check
+    fetch('/auth/me').then(r => r.json()).then(d => {
+      if (!d.authenticated) return window.location.href = '/login.html'
+      currentUser = d.user
+      document.getElementById('userName').textContent = d.user.username
+      if (d.user.profileImage) {
+        const av = document.getElementById('userAvatar')
+        av.src = d.user.profileImage
+        av.style.display = 'block'
+      }
+      if (d.user.role === 'admin') {
+        const nav = document.getElementById('navLinks')
+        const a = document.createElement('a')
+        a.href = '/admin.html'
+        a.textContent = 'admin'
+        nav.appendChild(a)
+      }
+      loadClips()
+    }).catch(() => window.location.href = '/login.html')
+
+    async function loadClips() {
+      try {
+        const res = await fetch(`/api/clips?limit=20&offset=${offset}`)
+        const data = await res.json()
+
+        // Stats
+        document.getElementById('statTotal').textContent = data.stats.total.toLocaleString()
+        document.getElementById('statClipped').textContent = data.stats.clipped.toLocaleString()
+        const rate = data.stats.total > 0 ? Math.round((data.stats.clipped / data.stats.total) * 100) : 0
+        document.getElementById('statRate').textContent = rate + '%'
+
+        // Top channels
+        const topEl = document.getElementById('topChannels')
+        topEl.innerHTML = data.stats.topChannels.map(ch =>
+          `<div class="top-ch ${filterChannel === ch.channel ? 'active' : ''}" onclick="toggleFilter('${ch.channel}')">
+            ${ch.channel}<span class="count">${ch.count}</span>
+          </div>`
+        ).join('')
+
+        // Clips
+        allClips = data.clips
+        renderClips()
+
+        document.getElementById('loadMore').style.display = data.clips.length >= 20 ? 'flex' : 'none'
+      } catch {}
+    }
+
+    function renderClips() {
+      const grid = document.getElementById('clipsGrid')
+      const filtered = filterChannel
+        ? allClips.filter(c => c.channel === filterChannel)
+        : allClips
+
+      if (filtered.length === 0) {
+        grid.innerHTML = '<div class="empty">no clips yet — watch some channels to start capturing</div>'
+        return
+      }
+
+      grid.innerHTML = filtered.map(c => {
+        const jumpClass = c.jumpPercent > 150 ? 'mega' : c.jumpPercent > 50 ? 'high' : ''
+        const moodTag = c.mood || c.vibe
+        const clipSlug = c.clipUrl ? c.clipUrl.split('/').pop() : null
+        const time = new Date(c.timestamp).toLocaleString()
+
+        return `
+          <div class="clip-card">
+            ${clipSlug ? `
+              <div class="clip-embed">
+                <iframe src="https://clips.twitch.tv/embed?clip=${clipSlug}&parent=${location.hostname}&autoplay=false&muted=true" allowfullscreen></iframe>
+              </div>
+            ` : ''}
+            <div class="clip-info">
+              <div class="clip-header">
+                <span class="clip-channel">${c.channel}</span>
+                <span class="clip-jump ${jumpClass}">+${c.jumpPercent}%</span>
+              </div>
+              <div class="clip-meta">
+                <span class="vibe-tag ${moodTag}">${moodTag}</span>
+                <span class="clip-time">${time}</span>
+              </div>
+              ${c.description ? `<div class="clip-desc">${esc(c.description)}</div>` : ''}
+              <div class="clip-actions">
+                ${c.clipUrl ? `<a class="primary" href="${c.clipUrl}" target="_blank">watch clip</a>` : ''}
+                ${c.vodUrl ? `<a href="${c.vodUrl}" target="_blank">vod</a>` : ''}
+                <a href="/clip/${c.id}">details</a>
+              </div>
+            </div>
+          </div>
+        `
+      }).join('')
+    }
+
+    function toggleFilter(channel) {
+      filterChannel = filterChannel === channel ? null : channel
+      offset = 0
+      loadClips()
+    }
+
+    async function loadMore() {
+      offset += 20
+      try {
+        const res = await fetch(`/api/clips?limit=20&offset=${offset}`)
+        const data = await res.json()
+        allClips = [...allClips, ...data.clips]
+        renderClips()
+        document.getElementById('loadMore').style.display = data.clips.length >= 20 ? 'flex' : 'none'
+      } catch {}
+    }
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML }
+
+    async function logout() {
+      await fetch('/auth/logout', { method: 'POST' })
+      window.location.href = '/login.html'
+    }
+  </script>
+</body>
+</html>

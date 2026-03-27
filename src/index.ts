@@ -9,9 +9,10 @@ import { createClient, http } from 'viem'
 import { tempo as tempoChain } from 'viem/chains'
 import { connectFirehose, getTrending, getChannel, getSpikes, getStats, isConnected, getVodTimestamp, getVodUrl, isStreamLive, onSpike, getViewerCount, setActiveChannel, removeActiveChannel } from './firehose.js'
 import { summarizeChannel, classifySpike, classifySpikeDirect, summarizeChannelDirect, getLLMBudget, hasDirectAPI } from './summarize.js'
-import { startMomentCapture, getMoments, getMomentById, watchChannel, unwatchChannel, getWatchedChannels } from './moments.js'
+import { startMomentCapture, getMoments, getMomentById, watchChannel, unwatchChannel, getWatchedChannels, getMomentStats, getClippedMoments, initWatchedChannels } from './moments.js'
 import { setTwitchAuth, getTwitchAuth, createClip } from './clip.js'
 import { createUser, getUser, createSession, validateSession, destroySession, generateInviteCode, validateInviteCode, redeemInviteCode, getInviteCodes, getAllUsers, isAdmin, isDesignatedAdmin, checkRateLimit, getSessionCookie, clearSessionCookie, parseSessionToken, getAuthStats, createPendingRegistration, consumePendingRegistration } from './auth.js'
+import { initDatabase } from './db/index.js'
 import crypto from 'crypto'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -55,19 +56,19 @@ let twitchUserToken: string | null = null
 let twitchUserId: string | null = null
 
 // --- Auth middleware ---
-function requireAuth(req: any, res: any, next: any) {
+async function requireAuth(req: any, res: any, next: any) {
   const token = parseSessionToken(req.headers.cookie)
   if (!token) return res.status(401).json({ error: 'Not authenticated' })
-  const user = validateSession(token)
+  const user = await validateSession(token)
   if (!user) return res.status(401).json({ error: 'Session expired' })
   req.user = user
   next()
 }
 
-function requireAdmin(req: any, res: any, next: any) {
+async function requireAdmin(req: any, res: any, next: any) {
   const token = parseSessionToken(req.headers.cookie)
   if (!token) return res.status(401).json({ error: 'Not authenticated' })
-  const user = validateSession(token)
+  const user = await validateSession(token)
   if (!user) return res.status(401).json({ error: 'Session expired' })
   if (user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' })
   req.user = user
@@ -90,10 +91,10 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, '..', 'public')))
 
 // --- Auth check endpoint ---
-app.get('/auth/me', (req, res) => {
+app.get('/auth/me', async (req, res) => {
   const token = parseSessionToken(req.headers.cookie)
   if (!token) return res.json({ authenticated: false })
-  const user = validateSession(token)
+  const user = await validateSession(token)
   if (!user) return res.json({ authenticated: false })
   res.json({
     authenticated: true,
@@ -153,10 +154,10 @@ app.get('/auth/twitch/callback', rateLimit, async (req, res) => {
     setTwitchAuth(data.access_token, twitchId)
 
     // 1. Existing user — log them in
-    let user = getUser(twitchId)
+    let user = await getUser(twitchId)
     if (user) {
       const isSecure = proto === 'https'
-      const session = createSession(user.id)
+      const session = await createSession(user.id)
       res.setHeader('Set-Cookie', getSessionCookie(session.token, isSecure))
       console.log(`[auth] Login: ${username} (${twitchId}) role=${user.role}`)
       return res.redirect('/')
@@ -164,9 +165,9 @@ app.get('/auth/twitch/callback', rateLimit, async (req, res) => {
 
     // 2. Designated admin — create + log in, no invite needed
     if (isDesignatedAdmin(username)) {
-      user = createUser(twitchId, username, profileImage, 'admin_env')
+      user = await createUser(twitchId, username, profileImage, 'admin_env')
       const isSecure = proto === 'https'
-      const session = createSession(user.id)
+      const session = await createSession(user.id)
       res.setHeader('Set-Cookie', getSessionCookie(session.token, isSecure))
       console.log(`[auth] Admin login: ${username} (${twitchId})`)
       return res.redirect('/')
@@ -184,7 +185,7 @@ app.get('/auth/twitch/callback', rateLimit, async (req, res) => {
 })
 
 // --- Verify invite code for pending registration ---
-app.get('/auth/verify-invite', rateLimit, (req, res) => {
+app.get('/auth/verify-invite', rateLimit, async (req, res) => {
   const token = req.query.token as string
   const inviteCode = req.query.invite as string
 
@@ -193,28 +194,27 @@ app.get('/auth/verify-invite', rateLimit, (req, res) => {
   const pending = consumePendingRegistration(token)
   if (!pending) return res.redirect('/login.html?error=server_error')
 
-  if (!validateInviteCode(inviteCode)) {
-    // Re-create pending so they can try again
+  if (!(await validateInviteCode(inviteCode))) {
     const newPending = createPendingRegistration(pending.twitchId, pending.username, pending.profileImage, pending.twitchAccessToken)
     const avatarParam = pending.profileImage ? `&avatar=${encodeURIComponent(pending.profileImage)}` : ''
     return res.redirect(`/invite.html?token=${newPending.token}&name=${encodeURIComponent(pending.username)}${avatarParam}&error=invalid_invite`)
   }
 
-  redeemInviteCode(inviteCode, pending.twitchId)
-  const user = createUser(pending.twitchId, pending.username, pending.profileImage, inviteCode)
+  await redeemInviteCode(inviteCode, pending.twitchId, pending.username)
+  const user = await createUser(pending.twitchId, pending.username, pending.profileImage, inviteCode)
 
   const proto = req.get('x-forwarded-proto') || req.protocol
   const isSecure = proto === 'https'
-  const session = createSession(user.id)
+  const session = await createSession(user.id)
   res.setHeader('Set-Cookie', getSessionCookie(session.token, isSecure))
 
   console.log(`[auth] New user registered: ${pending.username} (${pending.twitchId}) with invite ${inviteCode}`)
   res.redirect('/')
 })
 
-app.post('/auth/logout', (req, res) => {
+app.post('/auth/logout', async (req, res) => {
   const token = parseSessionToken(req.headers.cookie)
-  if (token) destroySession(token)
+  if (token) await destroySession(token)
   const proto = req.get('x-forwarded-proto') || req.protocol
   const isSecure = proto === 'https'
   res.setHeader('Set-Cookie', clearSessionCookie(isSecure))
@@ -222,26 +222,26 @@ app.post('/auth/logout', (req, res) => {
 })
 
 // --- Admin API ---
-app.post('/admin/invite', requireAdmin, (req, res) => {
+app.post('/admin/invite', requireAdmin, async (req, res) => {
   const { label } = req.body || {}
-  const invite = generateInviteCode((req as any).user.id, label || '')
+  const invite = await generateInviteCode((req as any).user.id, label || '')
   res.json({ code: invite.code, label: invite.label })
 })
 
-app.get('/admin/invites', requireAdmin, (_req, res) => {
-  res.json({ invites: getInviteCodes() })
+app.get('/admin/invites', requireAdmin, async (_req, res) => {
+  res.json({ invites: await getInviteCodes() })
 })
 
-app.get('/admin/users', requireAdmin, (_req, res) => {
-  res.json({ users: getAllUsers() })
+app.get('/admin/users', requireAdmin, async (_req, res) => {
+  res.json({ users: await getAllUsers() })
 })
 
 app.get('/admin/budget', requireAdmin, (_req, res) => {
   res.json(getLLMBudget())
 })
 
-app.get('/admin/stats', requireAdmin, (_req, res) => {
-  const auth = getAuthStats()
+app.get('/admin/stats', requireAdmin, async (_req, res) => {
+  const auth = await getAuthStats()
   const llm = getLLMBudget()
   const system = getStats()
   res.json({ auth, llm, system })
@@ -292,7 +292,7 @@ app.get('/health', (_req, res) => {
 
 // --- Create a clip for a moment ---
 app.post('/clip/:id', requireAuth, async (req, res) => {
-  const moment = getMomentById(parseInt(req.params.id))
+  const moment = await getMomentById(parseInt(req.params.id))
   if (!moment) return res.status(404).json({ error: 'Moment not found' })
   if (!twitchUserToken) return res.status(401).json({ error: 'Twitch not connected. Visit /auth/twitch first.' })
 
@@ -362,16 +362,16 @@ app.post('/clip/:id', requireAuth, async (req, res) => {
 })
 
 // --- Watchlist (requires auth) ---
-app.post('/watch-clip/:channel', requireAuth, (req, res) => {
+app.post('/watch-clip/:channel', requireAuth, async (req, res) => {
   const channel = req.params.channel.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase()
   if (!channel) return res.status(400).json({ error: 'Invalid channel name' })
-  watchChannel(channel)
+  await watchChannel(channel)
   res.json({ watching: getWatchedChannels() })
 })
 
-app.delete('/watch-clip/:channel', requireAuth, (req, res) => {
+app.delete('/watch-clip/:channel', requireAuth, async (req, res) => {
   const channel = req.params.channel.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase()
-  unwatchChannel(channel)
+  await unwatchChannel(channel)
   res.json({ watching: getWatchedChannels() })
 })
 
@@ -598,7 +598,7 @@ app.post('/summarize',
 
 // --- Classify a moment (auth required, uses direct API) ---
 app.get('/moments/:id/classify', requireAuth, async (req, res) => {
-  const moment = getMomentById(parseInt(req.params.id))
+  const moment = await getMomentById(parseInt(req.params.id))
   if (!moment) return res.status(404).json({ error: 'Moment not found' })
 
   // Use direct API if available, fallback to MPP
@@ -614,22 +614,22 @@ app.get('/moments/:id/classify', requireAuth, async (req, res) => {
 // --- Moments (paid via MPP for agents) ---
 app.post('/moments',
   mppx.charge({ amount: '0.001', description: 'Captured moments query' }),
-  (req, res) => {
+  async (req, res) => {
     const { channel, clipWorthyOnly, limit } = req.body || {}
-    const result = getMoments({ channel, clipWorthyOnly, limit: limit || 20 })
+    const result = await getMoments({ channel, clipWorthyOnly, limit: limit || 20 })
     res.json({ moments: result, count: result.length })
   }
 )
 
-app.get('/moments/latest/:channel', (req, res) => {
-  const result = getMoments({ channel: req.params.channel, limit: 1 })
+app.get('/moments/latest/:channel', async (req, res) => {
+  const result = await getMoments({ channel: req.params.channel, limit: 1 })
   if (result.length === 0) return res.status(404).json({ error: 'No moments for this channel' })
   res.json(result[0])
 })
 
 // --- Clip page — embeds Twitch player at the right timestamp ---
-app.get('/clip/:id', (req, res) => {
-  const moment = getMomentById(parseInt(req.params.id))
+app.get('/clip/:id', async (req, res) => {
+  const moment = await getMomentById(parseInt(req.params.id))
   if (!moment) return res.status(404).send('Moment not found')
 
   const t = moment.clipStart || moment.vodTimestamp || '0h0m0s'
@@ -685,20 +685,39 @@ app.get('/clip/:id', (req, res) => {
 </body></html>`)
 })
 
-app.get('/moments/:id', (req, res) => {
+app.get('/moments/:id', async (req, res) => {
   const id = parseInt(req.params.id)
-  const moment = getMomentById(id)
+  const moment = await getMomentById(id)
   if (!moment) return res.status(404).json({ error: `Moment #${id} not found` })
   res.json(moment)
 })
 
+// --- Clips directory API (public) ---
+app.get('/api/clips', async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit as string) || 20, 50)
+  const offset = parseInt(req.query.offset as string) || 0
+  const clips = await getClippedMoments(limit, offset)
+  const stats = await getMomentStats()
+  res.json({ clips, stats })
+})
+
 // --- Start ---
-app.listen(PORT, () => {
-  console.log(`[server] Clippy API running on http://localhost:${PORT}`)
-  console.log(`[server] MPP payments enabled — recipient: ${WALLET}`)
-  console.log(`[server] Direct Anthropic API: ${hasDirectAPI() ? 'enabled' : 'disabled (set ANTHROPIC_API_KEY)'}`)
-  console.log(`[server] LLM budget: $${getLLMBudget().limit}`)
-  console.log(`[server] Connecting to Twitch firehose...`)
-  connectFirehose()
-  startMomentCapture()
+async function start() {
+  await initDatabase()
+  await initWatchedChannels()
+
+  app.listen(PORT, () => {
+    console.log(`[server] Clippy API running on http://localhost:${PORT}`)
+    console.log(`[server] MPP payments enabled — recipient: ${WALLET}`)
+    console.log(`[server] Direct Anthropic API: ${hasDirectAPI() ? 'enabled' : 'disabled (set ANTHROPIC_API_KEY)'}`)
+    console.log(`[server] LLM budget: $${getLLMBudget().limit}`)
+    console.log(`[server] Connecting to Twitch firehose...`)
+    connectFirehose()
+    startMomentCapture()
+  })
+}
+
+start().catch(err => {
+  console.error('[server] Failed to start:', err)
+  process.exit(1)
 })
