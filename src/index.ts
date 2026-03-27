@@ -11,7 +11,7 @@ import { connectFirehose, getTrending, getChannel, getSpikes, getStats, isConnec
 import { summarizeChannel, classifySpike, classifySpikeDirect, summarizeChannelDirect, getLLMBudget, hasDirectAPI } from './summarize.js'
 import { startMomentCapture, getMoments, getMomentById, watchChannel, unwatchChannel, getWatchedChannels } from './moments.js'
 import { setTwitchAuth, getTwitchAuth, createClip } from './clip.js'
-import { createUser, getUser, createSession, validateSession, destroySession, generateInviteCode, validateInviteCode, redeemInviteCode, getInviteCodes, getAllUsers, isAdmin, isDesignatedAdmin, checkRateLimit, getSessionCookie, clearSessionCookie, parseSessionToken, getAuthStats } from './auth.js'
+import { createUser, getUser, createSession, validateSession, destroySession, generateInviteCode, validateInviteCode, redeemInviteCode, getInviteCodes, getAllUsers, isAdmin, isDesignatedAdmin, checkRateLimit, getSessionCookie, clearSessionCookie, parseSessionToken, getAuthStats, createPendingRegistration, consumePendingRegistration } from './auth.js'
 import crypto from 'crypto'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -101,32 +101,17 @@ app.get('/auth/me', (req, res) => {
   })
 })
 
-// --- Twitch OAuth for user login (with invite code) ---
+// --- Twitch OAuth for user login ---
 app.get('/auth/twitch', rateLimit, (req, res) => {
-  const invite = req.query.invite as string
   const proto = req.get('x-forwarded-proto') || req.protocol
   const redirect = `${proto}://${req.get('host')}/auth/twitch/callback`
-
-  // Store invite code in OAuth state parameter
-  const state = invite ? Buffer.from(JSON.stringify({ invite })).toString('base64url') : ''
-
-  const url = `https://id.twitch.tv/oauth2/authorize?client_id=${TWITCH_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirect)}&response_type=code&scope=clips:edit+editor:manage:clips&state=${state}`
+  const url = `https://id.twitch.tv/oauth2/authorize?client_id=${TWITCH_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirect)}&response_type=code&scope=clips:edit+editor:manage:clips`
   res.redirect(url)
 })
 
 app.get('/auth/twitch/callback', rateLimit, async (req, res) => {
   const code = req.query.code as string
-  const stateParam = req.query.state as string
   if (!code) return res.status(400).send('Missing code')
-
-  // Parse invite code from state
-  let inviteCode = ''
-  if (stateParam) {
-    try {
-      const state = JSON.parse(Buffer.from(stateParam, 'base64url').toString())
-      inviteCode = state.invite || ''
-    } catch {}
-  }
 
   const proto = req.get('x-forwarded-proto') || req.protocol
   const redirect = `${proto}://${req.get('host')}/auth/twitch/callback`
@@ -167,34 +152,64 @@ app.get('/auth/twitch/callback', rateLimit, async (req, res) => {
     twitchUserId = twitchId
     setTwitchAuth(data.access_token, twitchId)
 
-    // Check if user already exists
+    // 1. Existing user — log them in
     let user = getUser(twitchId)
-
-    if (!user) {
-      // Designated admin (via ADMIN_TWITCH env var) skips invite code
-      if (isDesignatedAdmin(username)) {
-        user = createUser(twitchId, username, profileImage, 'admin_env')
-      } else {
-        // Everyone else needs a valid invite code
-        if (!inviteCode || !validateInviteCode(inviteCode)) {
-          return res.redirect('/login.html?error=invalid_invite')
-        }
-        redeemInviteCode(inviteCode, twitchId)
-        user = createUser(twitchId, username, profileImage, inviteCode)
-      }
+    if (user) {
+      const isSecure = proto === 'https'
+      const session = createSession(user.id)
+      res.setHeader('Set-Cookie', getSessionCookie(session.token, isSecure))
+      console.log(`[auth] Login: ${username} (${twitchId}) role=${user.role}`)
+      return res.redirect('/')
     }
 
-    // Create session
-    const isSecure = proto === 'https'
-    const session = createSession(user.id)
-    res.setHeader('Set-Cookie', getSessionCookie(session.token, isSecure))
+    // 2. Designated admin — create + log in, no invite needed
+    if (isDesignatedAdmin(username)) {
+      user = createUser(twitchId, username, profileImage, 'admin_env')
+      const isSecure = proto === 'https'
+      const session = createSession(user.id)
+      res.setHeader('Set-Cookie', getSessionCookie(session.token, isSecure))
+      console.log(`[auth] Admin login: ${username} (${twitchId})`)
+      return res.redirect('/')
+    }
 
-    console.log(`[auth] Login: ${username} (${twitchId}) role=${user.role}`)
-    res.redirect('/')
+    // 3. New user, not admin — send to invite code page
+    const pending = createPendingRegistration(twitchId, username, profileImage, data.access_token)
+    const avatarParam = profileImage ? `&avatar=${encodeURIComponent(profileImage)}` : ''
+    console.log(`[auth] New user ${username} — redirecting to invite code page`)
+    res.redirect(`/invite.html?token=${pending.token}&name=${encodeURIComponent(username)}${avatarParam}`)
   } catch (err: any) {
     console.error('[auth] OAuth error:', err.message)
     res.redirect('/login.html?error=server_error')
   }
+})
+
+// --- Verify invite code for pending registration ---
+app.get('/auth/verify-invite', rateLimit, (req, res) => {
+  const token = req.query.token as string
+  const inviteCode = req.query.invite as string
+
+  if (!token || !inviteCode) return res.redirect('/login.html')
+
+  const pending = consumePendingRegistration(token)
+  if (!pending) return res.redirect('/login.html?error=server_error')
+
+  if (!validateInviteCode(inviteCode)) {
+    // Re-create pending so they can try again
+    const newPending = createPendingRegistration(pending.twitchId, pending.username, pending.profileImage, pending.twitchAccessToken)
+    const avatarParam = pending.profileImage ? `&avatar=${encodeURIComponent(pending.profileImage)}` : ''
+    return res.redirect(`/invite.html?token=${newPending.token}&name=${encodeURIComponent(pending.username)}${avatarParam}&error=invalid_invite`)
+  }
+
+  redeemInviteCode(inviteCode, pending.twitchId)
+  const user = createUser(pending.twitchId, pending.username, pending.profileImage, inviteCode)
+
+  const proto = req.get('x-forwarded-proto') || req.protocol
+  const isSecure = proto === 'https'
+  const session = createSession(user.id)
+  res.setHeader('Set-Cookie', getSessionCookie(session.token, isSecure))
+
+  console.log(`[auth] New user registered: ${pending.username} (${pending.twitchId}) with invite ${inviteCode}`)
+  res.redirect('/')
 })
 
 app.post('/auth/logout', (req, res) => {

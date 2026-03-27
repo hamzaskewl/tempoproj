@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>clippy — invite code</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+      background: #0a0a0a;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      width: 100%;
+      max-width: 400px;
+      padding: 40px;
+    }
+    .logo {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      font-size: 12px;
+      color: #444;
+      margin-bottom: 32px;
+      line-height: 1.6;
+    }
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: #111;
+      border: 1px solid #1a1a1a;
+      border-radius: 6px;
+      margin-bottom: 24px;
+      font-size: 12px;
+    }
+    .user-info img { width: 28px; height: 28px; border-radius: 50%; }
+    .user-info .name { color: #fff; font-weight: 500; }
+    .user-info .sub { color: #444; font-size: 11px; }
+    label {
+      display: block;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #555;
+      margin-bottom: 8px;
+    }
+    .input-wrap { margin-bottom: 24px; }
+    input[type="text"] {
+      width: 100%;
+      background: #111;
+      border: 1px solid #1a1a1a;
+      border-radius: 6px;
+      padding: 14px 16px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 14px;
+      letter-spacing: 2px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]:focus { border-color: #333; }
+    input[type="text"]::placeholder { color: #222; letter-spacing: 0; }
+    .submit-btn {
+      width: 100%;
+      padding: 14px 24px;
+      background: #9146ff;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .submit-btn:hover { background: #7c3aed; }
+    .submit-btn:disabled { background: #1a1a1a; color: #333; cursor: not-allowed; }
+    .error {
+      background: #1a0a0a;
+      border: 1px solid #331111;
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-size: 12px;
+      color: #f87171;
+      margin-bottom: 24px;
+    }
+    .hint {
+      font-size: 11px;
+      color: #333;
+      margin-top: 24px;
+      text-align: center;
+      line-height: 1.6;
+    }
+    .hint a { color: #555; text-decoration: none; }
+    .hint a:hover { color: #fff; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">clippy</div>
+    <div class="subtitle">you're almost in — enter your invite code</div>
+
+    <div class="user-info" id="userInfo" style="display:none">
+      <img id="userAvatar" src="" alt="">
+      <div>
+        <div class="name" id="userName"></div>
+        <div class="sub">twitch account verified</div>
+      </div>
+    </div>
+
+    <div id="errorBox" class="error" style="display:none"></div>
+
+    <div class="input-wrap">
+      <label>invite code</label>
+      <input type="text" id="inviteCode" placeholder="enter your 16-character code" maxlength="16" autocomplete="off" spellcheck="false">
+    </div>
+
+    <button class="submit-btn" id="submitBtn" onclick="submitCode()" disabled>
+      verify &amp; enter
+    </button>
+
+    <div class="hint">
+      need an invite? ask someone who already has access
+      <br><a href="/login.html">use a different twitch account</a>
+    </div>
+  </div>
+
+  <script>
+    const input = document.getElementById('inviteCode')
+    const btn = document.getElementById('submitBtn')
+    const errorBox = document.getElementById('errorBox')
+
+    // Show pending user info
+    const params = new URLSearchParams(location.search)
+    const pendingToken = params.get('token')
+    const pendingName = params.get('name')
+    const pendingAvatar = params.get('avatar')
+
+    if (pendingName) {
+      document.getElementById('userName').textContent = pendingName
+      if (pendingAvatar) document.getElementById('userAvatar').src = decodeURIComponent(pendingAvatar)
+      document.getElementById('userInfo').style.display = 'flex'
+    }
+
+    if (params.get('error') === 'invalid_invite') {
+      errorBox.textContent = 'Invalid or already-used invite code. Try again.'
+      errorBox.style.display = 'block'
+    }
+
+    if (!pendingToken) {
+      // No pending token — shouldn't be here
+      window.location.href = '/login.html'
+    }
+
+    input.addEventListener('input', () => {
+      const val = input.value.replace(/[^a-fA-F0-9]/g, '')
+      input.value = val
+      btn.disabled = val.length < 16
+    })
+
+    function submitCode() {
+      const code = input.value.trim()
+      if (code.length < 16) return
+      window.location.href = `/auth/verify-invite?token=${pendingToken}&invite=${encodeURIComponent(code)}`
+    }
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !btn.disabled) submitCode()
+    })
+  </script>
+</body>
+</html>

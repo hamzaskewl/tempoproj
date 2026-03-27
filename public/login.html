@@ -32,37 +32,6 @@
       margin-bottom: 40px;
       line-height: 1.6;
     }
-    label {
-      display: block;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-      color: #555;
-      margin-bottom: 8px;
-    }
-    .input-wrap {
-      margin-bottom: 24px;
-    }
-    input[type="text"] {
-      width: 100%;
-      background: #111;
-      border: 1px solid #1a1a1a;
-      border-radius: 6px;
-      padding: 14px 16px;
-      color: #fff;
-      font-family: inherit;
-      font-size: 14px;
-      letter-spacing: 2px;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-    input[type="text"]:focus {
-      border-color: #333;
-    }
-    input[type="text"]::placeholder {
-      color: #222;
-      letter-spacing: 0;
-    }
     .twitch-btn {
       width: 100%;
       display: flex;
@@ -84,11 +53,6 @@
     .twitch-btn:hover {
       background: #7c3aed;
     }
-    .twitch-btn:disabled {
-      background: #1a1a1a;
-      color: #333;
-      cursor: not-allowed;
-    }
     .twitch-icon {
       width: 18px;
       height: 18px;
@@ -109,8 +73,6 @@
       text-align: center;
       line-height: 1.6;
     }
-    .hint a { color: #555; }
-    .hint a:hover { color: #fff; }
   </style>
 </head>
 <body>
@@ -120,54 +82,28 @@
 
     <div id="errorBox" class="error" style="display:none"></div>
 
-    <div class="input-wrap">
-      <label>invite code</label>
-      <input type="text" id="inviteCode" placeholder="enter your 16-character code" maxlength="16" autocomplete="off" spellcheck="false">
-    </div>
-
-    <button class="twitch-btn" id="loginBtn" onclick="login()" disabled>
+    <button class="twitch-btn" onclick="window.location.href='/auth/twitch'">
       <svg class="twitch-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/></svg>
       login with twitch
     </button>
 
     <div class="hint">
-      need an invite? ask someone who already has access
+      sign in with your twitch account to get started
     </div>
   </div>
 
   <script>
-    const input = document.getElementById('inviteCode')
-    const btn = document.getElementById('loginBtn')
-    const errorBox = document.getElementById('errorBox')
-
-    // Show error from redirect
     const params = new URLSearchParams(location.search)
     if (params.get('error')) {
       const msgs = {
-        invalid_invite: 'Invalid or already-used invite code.',
         oauth_failed: 'Twitch OAuth failed. Try again.',
         user_fetch_failed: 'Could not fetch your Twitch profile.',
         server_error: 'Something went wrong. Try again.',
       }
+      const errorBox = document.getElementById('errorBox')
       errorBox.textContent = msgs[params.get('error')] || 'Unknown error.'
       errorBox.style.display = 'block'
     }
-
-    input.addEventListener('input', () => {
-      const val = input.value.replace(/[^a-fA-F0-9]/g, '')
-      input.value = val
-      btn.disabled = val.length < 16
-    })
-
-    function login() {
-      const code = input.value.trim()
-      if (code.length < 16) return
-      window.location.href = `/auth/twitch?invite=${encodeURIComponent(code)}`
-    }
-
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !btn.disabled) login()
-    })
 
     // If already logged in, redirect to dashboard
     fetch('/auth/me').then(r => r.json()).then(d => {

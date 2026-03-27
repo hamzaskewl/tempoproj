@@ -332,7 +332,7 @@
             <td class="code-cell">${i.code}</td>
             <td>${i.label || '-'}</td>
             <td><span class="badge ${i.usedBy ? 'used' : 'available'}">${i.usedBy ? 'used' : 'available'}</span></td>
-            <td>${i.usedBy || '-'}</td>
+            <td>${i.usedByName || '-'}</td>
             <td>${!i.usedBy ? `<button class="copy-btn" onclick="copyCode(this, '${i.code}')">copy</button>` : ''}</td>
           </tr>
         `).join('')

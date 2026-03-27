@@ -70,8 +70,13 @@ export function redeemInviteCode(code: string, userId: string): boolean {
   return true
 }
 
-export function getInviteCodes(): InviteCode[] {
-  return [...inviteCodes.values()].sort((a, b) => b.createdAt - a.createdAt)
+export function getInviteCodes() {
+  return [...inviteCodes.values()]
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .map(i => ({
+      ...i,
+      usedByName: i.usedBy ? (users.get(i.usedBy)?.username || i.usedBy) : null,
+    }))
 }
 
 // --- Admin designation via env var ---
@@ -143,6 +148,42 @@ export function validateSession(token: string): User | null {
 
 export function destroySession(token: string) {
   sessions.delete(token)
+}
+
+// --- Pending registrations (awaiting invite code) ---
+interface PendingRegistration {
+  token: string
+  twitchId: string
+  username: string
+  profileImage: string
+  twitchAccessToken: string
+  createdAt: number
+}
+
+const pendingRegistrations = new Map<string, PendingRegistration>()
+const PENDING_TTL = 10 * 60 * 1000 // 10 minutes
+
+export function createPendingRegistration(twitchId: string, username: string, profileImage: string, twitchAccessToken: string): PendingRegistration {
+  const token = crypto.randomBytes(16).toString('hex')
+  const pending: PendingRegistration = { token, twitchId, username, profileImage, twitchAccessToken, createdAt: Date.now() }
+  pendingRegistrations.set(token, pending)
+  return pending
+}
+
+export function getPendingRegistration(token: string): PendingRegistration | null {
+  const pending = pendingRegistrations.get(token)
+  if (!pending) return null
+  if (Date.now() - pending.createdAt > PENDING_TTL) {
+    pendingRegistrations.delete(token)
+    return null
+  }
+  return pending
+}
+
+export function consumePendingRegistration(token: string): PendingRegistration | null {
+  const pending = getPendingRegistration(token)
+  if (pending) pendingRegistrations.delete(token)
+  return pending
 }
 
 // --- Rate Limiting ---
