@@ -1,27 +1,16 @@
-<p align="center">
-  <img src="public/logoclip.png" alt="clippy" width="80" />
-</p>
+# clippy
 
-<h1 align="center">clippy</h1>
+**Real-time Twitch stream intelligence & auto-clipping** — [clippy.build](https://clippy.build/)
 
-<p align="center">
-  <strong>Real-time Twitch stream intelligence & auto-clipping</strong>
-  <br />
-  Detects chat spikes, classifies moments with AI, clips highlights automatically.
-</p>
+Detects chat spikes, classifies moments with AI, clips highlights automatically.
 
-<p align="center">
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
-  <a href="https://typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white" alt="TypeScript" /></a>
-  <a href="https://twitch.tv"><img src="https://img.shields.io/badge/Twitch-9146FF?logo=twitch&logoColor=white" alt="Twitch" /></a>
-  <a href="https://anthropic.com"><img src="https://img.shields.io/badge/Claude_AI-Haiku_4.5-orange" alt="Claude AI" /></a>
-</p>
+[![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://typescriptlang.org) [![Twitch](https://img.shields.io/badge/Twitch-9146FF?logo=twitch&logoColor=white)](https://twitch.tv) [![Claude AI](https://img.shields.io/badge/Claude_AI-Haiku_4.5-orange)](https://anthropic.com)
 
 ---
 
 ## What is clippy?
 
-clippy monitors Twitch streams in real time, detects when chat goes crazy, figures out what happened using AI, and automatically creates clips — all hands-free.
+[clippy.build](https://clippy.build/) monitors Twitch streams in real time, detects when chat goes crazy, figures out what happened using AI, and automatically creates clips — all hands-free.
 
 You add up to 3 channels, confirm them when they're live, and clippy handles the rest. Every spike gets classified, described, and clipped to your Twitch account.
 
@@ -176,14 +165,10 @@ public/
 - **Payments** — Tempo MPP, Viem, USDC on Tempo Chain
 - **Twitch** — Helix API, OAuth 2.0, GQL for stream context
 - **Frontend** — Vanilla JS, SSE, dark monospace UI
-- **Hosting** — Railway
+- **Hosting** — Railway ([clippy.build](https://clippy.build/))
 
 ---
 
 ## Contributing
 
 PRs welcome. If you're adding a feature, open an issue first so we can discuss.
-
-## License
-
-[MIT](LICENSE) — do whatever you want with it.
