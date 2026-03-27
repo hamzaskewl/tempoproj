@@ -226,10 +226,10 @@
   <div class="topbar">
     <div class="topbar-left">
       <div class="logo">clippy</div>
-      <nav>
+      <nav id="navLinks">
         <a href="/" class="active">home</a>
+        <a href="/dashboard.html">dashboard</a>
         <a href="/clips.html">clips</a>
-        <a href="/dashboard.html" id="dashLink" style="display:none">dashboard</a>
       </nav>
     </div>
     <div class="topbar-right">
@@ -316,11 +316,17 @@
       if (d.authenticated) {
         isLoggedIn = true
         document.getElementById('loginBtn').style.display = 'none'
-        document.getElementById('dashLink').style.display = ''
         const link = document.getElementById('userLink')
         link.style.display = 'flex'
         document.getElementById('userName').textContent = d.user.username
         if (d.user.profileImage) document.getElementById('userAvatar').src = d.user.profileImage
+        if (d.user.role === 'admin') {
+          const nav = document.getElementById('navLinks')
+          const a = document.createElement('a')
+          a.href = '/admin.html'
+          a.textContent = 'admin'
+          nav.appendChild(a)
+        }
         document.getElementById('ctaBox').innerHTML = `
           <h3>your dashboard</h3>
           <p>manage your 3 channel slots, see your clips, and monitor live activity.</p>
