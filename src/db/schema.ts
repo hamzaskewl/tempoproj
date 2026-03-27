@@ -64,6 +64,13 @@ export const watchedChannels = pgTable('watched_channels', {
   addedAt: timestamp('added_at').defaultNow().notNull(),
 })
 
+export const twitchTokens = pgTable('twitch_tokens', {
+  userId: text('user_id').primaryKey(),
+  accessToken: text('access_token').notNull(),
+  refreshToken: text('refresh_token').notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
 export const userChannels = pgTable('user_channels', {
   id: serial('id').primaryKey(),
   userId: text('user_id').notNull(),

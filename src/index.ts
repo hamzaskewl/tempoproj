@@ -10,7 +10,7 @@ import { tempo as tempoChain } from 'viem/chains'
 import { connectFirehose, getTrending, getChannel, getSpikes, getStats, isConnected, getVodTimestamp, getVodUrl, isStreamLive, onSpike, getViewerCount, setActiveChannel, removeActiveChannel } from './firehose.js'
 import { summarizeChannel, classifySpike, classifySpikeDirect, summarizeChannelDirect, getLLMBudget, hasDirectAPI } from './summarize.js'
 import { startMomentCapture, getMoments, getMomentById, watchChannel, unwatchChannel, getWatchedChannels, getMomentStats, getClippedMoments, initWatchedChannels, getUserChannels, addUserChannel, removeUserChannel, confirmUserChannel } from './moments.js'
-import { setTwitchAuth, getTwitchAuth, createClip } from './clip.js'
+import { setTwitchAuth, getTwitchAuth, createClip, restoreTwitchAuth } from './clip.js'
 import { createUser, getUser, createSession, validateSession, destroySession, generateInviteCode, validateInviteCode, redeemInviteCode, getInviteCodes, getAllUsers, isAdmin, isDesignatedAdmin, checkRateLimit, getSessionCookie, clearSessionCookie, parseSessionToken, getAuthStats, createPendingRegistration, consumePendingRegistration } from './auth.js'
 import { initDatabase } from './db/index.js'
 import crypto from 'crypto'
@@ -165,7 +165,7 @@ app.get('/auth/twitch/callback', rateLimit, async (req, res) => {
     // Store token for clip creation (server-level, shared)
     twitchUserToken = data.access_token
     twitchUserId = twitchId
-    setTwitchAuth(data.access_token, twitchId)
+    setTwitchAuth(data.access_token, twitchId, data.refresh_token)
 
     // 1. Existing user — log them in
     let user = await getUser(twitchId)
@@ -783,6 +783,7 @@ app.get('/api/stats', async (_req, res) => {
 async function start() {
   await initDatabase()
   await initWatchedChannels()
+  await restoreTwitchAuth()
 
   app.listen(PORT, () => {
     console.log(`[server] Clippy API running on http://localhost:${PORT}`)

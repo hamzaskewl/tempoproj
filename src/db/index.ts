@@ -96,6 +96,15 @@ export async function initDatabase() {
     `
 
     await client`
+      CREATE TABLE IF NOT EXISTS twitch_tokens (
+        user_id TEXT PRIMARY KEY,
+        access_token TEXT NOT NULL,
+        refresh_token TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+      )
+    `
+
+    await client`
       CREATE TABLE IF NOT EXISTS user_channels (
         id SERIAL PRIMARY KEY,
         user_id TEXT NOT NULL,
