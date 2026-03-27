@@ -11,7 +11,7 @@ import { connectFirehose, getTrending, getChannel, getSpikes, getStats, isConnec
 import { summarizeChannel, classifySpike, classifySpikeDirect, summarizeChannelDirect, getLLMBudget, hasDirectAPI } from './summarize.js'
 import { startMomentCapture, getMoments, getMomentById, watchChannel, unwatchChannel, getWatchedChannels } from './moments.js'
 import { setTwitchAuth, getTwitchAuth, createClip } from './clip.js'
-import { createUser, getUser, createSession, validateSession, destroySession, generateInviteCode, validateInviteCode, redeemInviteCode, getInviteCodes, getAllUsers, isAdmin, checkRateLimit, getSessionCookie, clearSessionCookie, parseSessionToken, getAuthStats } from './auth.js'
+import { createUser, getUser, createSession, validateSession, destroySession, generateInviteCode, validateInviteCode, redeemInviteCode, getInviteCodes, getAllUsers, isAdmin, isDesignatedAdmin, checkRateLimit, getSessionCookie, clearSessionCookie, parseSessionToken, getAuthStats } from './auth.js'
 import crypto from 'crypto'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -171,15 +171,17 @@ app.get('/auth/twitch/callback', rateLimit, async (req, res) => {
     let user = getUser(twitchId)
 
     if (!user) {
-      // New user — need valid invite code (unless first user)
-      const isFirst = getAllUsers().length === 0
-      if (!isFirst) {
+      // Designated admin (via ADMIN_TWITCH env var) skips invite code
+      if (isDesignatedAdmin(username)) {
+        user = createUser(twitchId, username, profileImage, 'admin_env')
+      } else {
+        // Everyone else needs a valid invite code
         if (!inviteCode || !validateInviteCode(inviteCode)) {
           return res.redirect('/login.html?error=invalid_invite')
         }
         redeemInviteCode(inviteCode, twitchId)
+        user = createUser(twitchId, username, profileImage, inviteCode)
       }
-      user = createUser(twitchId, username, profileImage, inviteCode || 'first_user')
     }
 
     // Create session

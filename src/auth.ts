@@ -74,15 +74,21 @@ export function getInviteCodes(): InviteCode[] {
   return [...inviteCodes.values()].sort((a, b) => b.createdAt - a.createdAt)
 }
 
+// --- Admin designation via env var ---
+const ADMIN_TWITCH = (process.env.ADMIN_TWITCH || '').toLowerCase()
+
+export function isDesignatedAdmin(username: string): boolean {
+  return !!ADMIN_TWITCH && username.toLowerCase() === ADMIN_TWITCH
+}
+
 // --- Users ---
 
 export function createUser(twitchId: string, username: string, profileImage: string, inviteCode: string): User {
-  const isFirstUser = users.size === 0
   const user: User = {
     id: twitchId,
     username,
     profileImage,
-    role: isFirstUser ? 'admin' : 'user',
+    role: isDesignatedAdmin(username) ? 'admin' : 'user',
     inviteCode,
     createdAt: Date.now(),
     lastSeen: Date.now(),
