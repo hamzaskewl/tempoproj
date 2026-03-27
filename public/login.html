@@ -17,7 +17,7 @@
     }
     .login-card {
       width: 100%;
-      max-width: 400px;
+      max-width: 440px;
       padding: 40px;
     }
     .logo {
@@ -29,8 +29,59 @@
     .subtitle {
       font-size: 12px;
       color: #444;
-      margin-bottom: 40px;
+      margin-bottom: 32px;
       line-height: 1.6;
+    }
+    .tos-box {
+      background: #0e0e0e;
+      border: 1px solid #1a1a1a;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 24px;
+      font-size: 11px;
+      color: #666;
+      line-height: 1.8;
+    }
+    .tos-box h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #888;
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
+    .tos-box ul {
+      list-style: none;
+      padding: 0;
+    }
+    .tos-box ul li {
+      padding: 4px 0;
+      padding-left: 16px;
+      position: relative;
+    }
+    .tos-box ul li::before {
+      content: '•';
+      position: absolute;
+      left: 0;
+      color: #333;
+    }
+    .tos-box .highlight {
+      color: #999;
+    }
+    .tos-check {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 24px;
+      font-size: 11px;
+      color: #666;
+      line-height: 1.6;
+      cursor: pointer;
+    }
+    .tos-check input[type="checkbox"] {
+      margin-top: 2px;
+      accent-color: #9146ff;
+      cursor: pointer;
     }
     .twitch-btn {
       width: 100%;
@@ -50,13 +101,13 @@
       transition: background 0.15s;
       text-decoration: none;
     }
-    .twitch-btn:hover {
-      background: #7c3aed;
+    .twitch-btn:hover { background: #7c3aed; }
+    .twitch-btn:disabled {
+      background: #1a1a1a;
+      color: #333;
+      cursor: not-allowed;
     }
-    .twitch-icon {
-      width: 18px;
-      height: 18px;
-    }
+    .twitch-icon { width: 18px; height: 18px; }
     .error {
       background: #1a0a0a;
       border: 1px solid #331111;
@@ -73,22 +124,41 @@
       text-align: center;
       line-height: 1.6;
     }
+    .hint a { color: #555; text-decoration: none; }
+    .hint a:hover { color: #fff; }
   </style>
 </head>
 <body>
   <div class="login-card">
     <div class="logo">clippy</div>
-    <div class="subtitle">real-time twitch stream intelligence</div>
+    <div class="subtitle">real-time twitch stream intelligence &amp; auto-clipping</div>
 
     <div id="errorBox" class="error" style="display:none"></div>
 
-    <button class="twitch-btn" onclick="window.location.href='/auth/twitch'">
+    <div class="tos-box">
+      <h3>before you continue</h3>
+      <ul>
+        <li><span class="highlight">Clips are created on your Twitch account.</span> When clippy detects a highlight moment, it uses your Twitch credentials to create clips — these will appear as clips you made.</li>
+        <li>You grant clippy the <span class="highlight">clips:edit</span> permission through Twitch OAuth. You can revoke this anytime from your Twitch settings.</li>
+        <li>This is a <span class="highlight">free service</span> during early access. You get 3 channel slots to monitor live streams for auto-clipping.</li>
+        <li>By logging in, you agree to abide by <a href="https://www.twitch.tv/p/legal/terms-of-service/" target="_blank" style="color:#9146ff">Twitch's Terms of Service</a> and <a href="https://www.twitch.tv/p/legal/community-guidelines/" target="_blank" style="color:#9146ff">Community Guidelines</a> regarding clip creation.</li>
+        <li>You are responsible for clips created on your account. Don't use this to clip content that violates Twitch TOS.</li>
+      </ul>
+    </div>
+
+    <label class="tos-check">
+      <input type="checkbox" id="tosCheck" onchange="updateBtn()">
+      <span>I understand that clips will be created on my Twitch account and I agree to Twitch's Terms of Service.</span>
+    </label>
+
+    <button class="twitch-btn" id="loginBtn" disabled onclick="doLogin()">
       <svg class="twitch-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/></svg>
       login with twitch
     </button>
 
     <div class="hint">
-      sign in with your twitch account to get started
+      you'll need an invite code to complete sign-up
+      <br>have one already? just click login above
     </div>
   </div>
 
@@ -107,8 +177,19 @@
 
     // If already logged in, redirect to dashboard
     fetch('/auth/me').then(r => r.json()).then(d => {
-      if (d.authenticated) window.location.href = '/'
+      if (d.authenticated) window.location.href = '/dashboard.html'
     }).catch(() => {})
+
+    function updateBtn() {
+      document.getElementById('loginBtn').disabled = !document.getElementById('tosCheck').checked
+    }
+
+    function doLogin() {
+      // Pass invite code from URL if present
+      const invite = params.get('invite') || params.get('code') || ''
+      const url = invite ? `/auth/twitch?invite=${encodeURIComponent(invite)}` : '/auth/twitch'
+      window.location.href = url
+    }
   </script>
 </body>
 </html>

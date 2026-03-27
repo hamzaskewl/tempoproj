@@ -9,7 +9,7 @@ import { createClient, http } from 'viem'
 import { tempo as tempoChain } from 'viem/chains'
 import { connectFirehose, getTrending, getChannel, getSpikes, getStats, isConnected, getVodTimestamp, getVodUrl, isStreamLive, onSpike, getViewerCount, setActiveChannel, removeActiveChannel } from './firehose.js'
 import { summarizeChannel, classifySpike, classifySpikeDirect, summarizeChannelDirect, getLLMBudget, hasDirectAPI } from './summarize.js'
-import { startMomentCapture, getMoments, getMomentById, watchChannel, unwatchChannel, getWatchedChannels, getMomentStats, getClippedMoments, initWatchedChannels } from './moments.js'
+import { startMomentCapture, getMoments, getMomentById, watchChannel, unwatchChannel, getWatchedChannels, getMomentStats, getClippedMoments, initWatchedChannels, getUserChannels, addUserChannel, removeUserChannel, confirmUserChannel } from './moments.js'
 import { setTwitchAuth, getTwitchAuth, createClip } from './clip.js'
 import { createUser, getUser, createSession, validateSession, destroySession, generateInviteCode, validateInviteCode, redeemInviteCode, getInviteCodes, getAllUsers, isAdmin, isDesignatedAdmin, checkRateLimit, getSessionCookie, clearSessionCookie, parseSessionToken, getAuthStats, createPendingRegistration, consumePendingRegistration } from './auth.js'
 import { initDatabase } from './db/index.js'
@@ -103,16 +103,30 @@ app.get('/auth/me', async (req, res) => {
 })
 
 // --- Twitch OAuth for user login ---
+// Supports ?code=INVITE_CODE to auto-apply invite after OAuth
 app.get('/auth/twitch', rateLimit, (req, res) => {
   const proto = req.get('x-forwarded-proto') || req.protocol
+  const inviteCode = req.query.code as string || req.query.invite as string || ''
+  // Pass invite code through OAuth state param
+  const state = inviteCode ? Buffer.from(JSON.stringify({ invite: inviteCode })).toString('base64url') : ''
   const redirect = `${proto}://${req.get('host')}/auth/twitch/callback`
-  const url = `https://id.twitch.tv/oauth2/authorize?client_id=${TWITCH_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirect)}&response_type=code&scope=clips:edit+editor:manage:clips`
+  const url = `https://id.twitch.tv/oauth2/authorize?client_id=${TWITCH_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirect)}&response_type=code&scope=clips:edit+editor:manage:clips${state ? `&state=${state}` : ''}`
   res.redirect(url)
 })
 
 app.get('/auth/twitch/callback', rateLimit, async (req, res) => {
   const code = req.query.code as string
   if (!code) return res.status(400).send('Missing code')
+
+  // Extract invite code from state param
+  let inviteFromUrl = ''
+  const stateParam = req.query.state as string
+  if (stateParam) {
+    try {
+      const decoded = JSON.parse(Buffer.from(stateParam, 'base64url').toString())
+      inviteFromUrl = decoded.invite || ''
+    } catch {}
+  }
 
   const proto = req.get('x-forwarded-proto') || req.protocol
   const redirect = `${proto}://${req.get('host')}/auth/twitch/callback`
@@ -160,24 +174,39 @@ app.get('/auth/twitch/callback', rateLimit, async (req, res) => {
       const session = await createSession(user.id)
       res.setHeader('Set-Cookie', getSessionCookie(session.token, isSecure))
       console.log(`[auth] Login: ${username} (${twitchId}) role=${user.role}`)
-      return res.redirect('/')
+      return res.redirect('/dashboard.html')
     }
 
     // 2. Designated admin — create + log in, no invite needed
     if (isDesignatedAdmin(username)) {
-      user = await createUser(twitchId, username, profileImage, 'admin_env')
+      user = await createUser(twitchId, username, profileImage, 'admin_env', true)
       const isSecure = proto === 'https'
       const session = await createSession(user.id)
       res.setHeader('Set-Cookie', getSessionCookie(session.token, isSecure))
       console.log(`[auth] Admin login: ${username} (${twitchId})`)
-      return res.redirect('/')
+      return res.redirect('/dashboard.html')
     }
 
-    // 3. New user, not admin — send to invite code page
+    // 3. New user — if invite code from URL, try to auto-apply
+    if (inviteFromUrl) {
+      const valid = await validateInviteCode(inviteFromUrl)
+      if (valid) {
+        await redeemInviteCode(inviteFromUrl, twitchId, username)
+        user = await createUser(twitchId, username, profileImage, inviteFromUrl, true)
+        const isSecure = proto === 'https'
+        const session = await createSession(user.id)
+        res.setHeader('Set-Cookie', getSessionCookie(session.token, isSecure))
+        console.log(`[auth] New user auto-registered: ${username} (${twitchId}) with invite from URL: ${inviteFromUrl}`)
+        return res.redirect('/dashboard.html')
+      }
+    }
+
+    // 4. New user, no valid invite from URL — send to invite code page
     const pending = createPendingRegistration(twitchId, username, profileImage, data.access_token)
     const avatarParam = profileImage ? `&avatar=${encodeURIComponent(profileImage)}` : ''
+    const inviteParam = inviteFromUrl ? `&prefill=${encodeURIComponent(inviteFromUrl)}` : ''
     console.log(`[auth] New user ${username} — redirecting to invite code page`)
-    res.redirect(`/invite.html?token=${pending.token}&name=${encodeURIComponent(username)}${avatarParam}`)
+    res.redirect(`/invite.html?token=${pending.token}&name=${encodeURIComponent(username)}${avatarParam}${inviteParam}`)
   } catch (err: any) {
     console.error('[auth] OAuth error:', err.message)
     res.redirect('/login.html?error=server_error')
@@ -201,7 +230,7 @@ app.get('/auth/verify-invite', rateLimit, async (req, res) => {
   }
 
   await redeemInviteCode(inviteCode, pending.twitchId, pending.username)
-  const user = await createUser(pending.twitchId, pending.username, pending.profileImage, inviteCode)
+  const user = await createUser(pending.twitchId, pending.username, pending.profileImage, inviteCode, true)
 
   const proto = req.get('x-forwarded-proto') || req.protocol
   const isSecure = proto === 'https'
@@ -209,7 +238,7 @@ app.get('/auth/verify-invite', rateLimit, async (req, res) => {
   res.setHeader('Set-Cookie', getSessionCookie(session.token, isSecure))
 
   console.log(`[auth] New user registered: ${pending.username} (${pending.twitchId}) with invite ${inviteCode}`)
-  res.redirect('/')
+  res.redirect('/dashboard.html')
 })
 
 app.post('/auth/logout', async (req, res) => {
@@ -223,9 +252,10 @@ app.post('/auth/logout', async (req, res) => {
 
 // --- Admin API ---
 app.post('/admin/invite', requireAdmin, async (req, res) => {
-  const { label } = req.body || {}
-  const invite = await generateInviteCode((req as any).user.id, label || '')
-  res.json({ code: invite.code, label: invite.label })
+  const { label, maxUses } = req.body || {}
+  const uses = Math.min(Math.max(parseInt(maxUses) || 1, 1), 10000)
+  const invite = await generateInviteCode((req as any).user.id, label || '', uses)
+  res.json({ code: invite.code, label: invite.label, maxUses: invite.maxUses })
 })
 
 app.get('/admin/invites', requireAdmin, async (_req, res) => {
@@ -270,8 +300,9 @@ app.get('/api', (_req, res) => {
         'GET /channel-stats/:name': 'Live channel rates + vibes',
         'POST /track/:channel': 'Add channel to tracking',
         'DELETE /track/:channel': 'Remove from tracking',
-        'POST /watch-clip/:channel': 'Add channel to auto-clip watchlist',
-        'DELETE /watch-clip/:channel': 'Remove from watchlist',
+        'POST /my/channels': 'Add a channel to your slots (max 3)',
+        'DELETE /my/channels/:channel': 'Remove channel from your slots',
+        'POST /my/channels/:channel/confirm': 'Confirm channel (must be live)',
       },
       paid_mpp: {
         'POST /trending': { price: '$0.001', description: 'Full trending list' },
@@ -288,6 +319,37 @@ app.get('/api', (_req, res) => {
 app.get('/health', (_req, res) => {
   const stats = getStats()
   res.json({ ok: true, ...stats, connected: isConnected() })
+})
+
+// --- Per-user channel management (max 3 slots) ---
+app.get('/my/channels', requireAuth, async (req, res) => {
+  const channels = await getUserChannels((req as any).user.id)
+  res.json({ channels, maxChannels: 3 })
+})
+
+app.post('/my/channels', requireAuth, async (req, res) => {
+  const { channel } = req.body || {}
+  if (!channel) return res.status(400).json({ error: 'Missing channel name' })
+  const ch = channel.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase()
+  if (!ch) return res.status(400).json({ error: 'Invalid channel name' })
+
+  const result = await addUserChannel((req as any).user.id, ch)
+  if (!result.ok) return res.status(400).json({ error: result.error })
+  res.json({ channels: result.channels, maxChannels: 3 })
+})
+
+app.delete('/my/channels/:channel', requireAuth, async (req, res) => {
+  const ch = req.params.channel.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase()
+  const result = await removeUserChannel((req as any).user.id, ch)
+  res.json({ channels: result.channels, maxChannels: 3 })
+})
+
+app.post('/my/channels/:channel/confirm', requireAuth, async (req, res) => {
+  const ch = req.params.channel.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase()
+  const result = await confirmUserChannel((req as any).user.id, ch)
+  if (!result.ok) return res.status(400).json({ error: result.error })
+  const channels = await getUserChannels((req as any).user.id)
+  res.json({ channels, maxChannels: 3 })
 })
 
 // --- Create a clip for a moment ---
@@ -361,7 +423,7 @@ app.post('/clip/:id', requireAuth, async (req, res) => {
   }
 })
 
-// --- Watchlist (requires auth) ---
+// --- Legacy watchlist (requires auth) — kept for backwards compat ---
 app.post('/watch-clip/:channel', requireAuth, async (req, res) => {
   const channel = req.params.channel.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase()
   if (!channel) return res.status(400).json({ error: 'Invalid channel name' })
@@ -385,6 +447,7 @@ app.get('/channel-stats/:name', requireAuth, async (req, res) => {
   const data = getChannel(name)
   if (!data) return res.status(404).json({ error: 'Not found' })
   const viewers = await getViewerCount(name).catch(() => null)
+  const live = await isStreamLive(name).catch(() => false)
   res.json({
     channel: data.channel,
     rate: data.sustained,
@@ -394,6 +457,7 @@ app.get('/channel-stats/:name', requireAuth, async (req, res) => {
     isSpike: data.isSpike,
     vibe: data.vibe,
     viewers,
+    live,
   })
 })
 
@@ -699,6 +763,20 @@ app.get('/api/clips', async (req, res) => {
   const clips = await getClippedMoments(limit, offset)
   const stats = await getMomentStats()
   res.json({ clips, stats })
+})
+
+// --- Public stats API for landing page ---
+app.get('/api/stats', async (_req, res) => {
+  const stats = getStats()
+  const momentStats = await getMomentStats()
+  const trending = getTrending(5)
+  res.json({
+    connected: stats.connected,
+    totalChannels: stats.totalChannels,
+    totalMsgsPerSec: stats.totalMsgsPerSec,
+    moments: momentStats,
+    trending: trending.channels || [],
+  })
 })
 
 // --- Start ---

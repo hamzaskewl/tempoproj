@@ -1,7 +1,7 @@
 import crypto from 'crypto'
 import { db } from './db/index.js'
-import { users as usersTable, inviteCodes as inviteCodesTable, sessions as sessionsTable } from './db/schema.js'
-import { eq, desc } from 'drizzle-orm'
+import { users as usersTable, inviteCodes as inviteCodesTable, inviteCodeUses as inviteCodeUsesTable, sessions as sessionsTable } from './db/schema.js'
+import { eq, desc, sql } from 'drizzle-orm'
 
 // --- Types ---
 export interface User {
@@ -12,16 +12,23 @@ export interface User {
   inviteCode: string
   createdAt: number
   lastSeen: number
+  tosAcceptedAt: number | null
 }
 
 export interface InviteCode {
   code: string
   createdBy: string
   createdAt: number
-  usedBy: string | null
-  usedByName: string | null
-  usedAt: number | null
+  maxUses: number
+  useCount: number
   label: string
+  uses: InviteCodeUse[]
+}
+
+export interface InviteCodeUse {
+  usedBy: string
+  usedByName: string
+  usedAt: number
 }
 
 export interface Session {
@@ -64,60 +71,70 @@ export function isDesignatedAdmin(username: string): boolean {
 
 // --- Invite Codes ---
 
-export async function generateInviteCode(createdBy: string, label: string = ''): Promise<InviteCode> {
+export async function generateInviteCode(createdBy: string, label: string = '', maxUses: number = 1): Promise<InviteCode> {
   const code = crypto.randomBytes(8).toString('hex')
   const now = Date.now()
   const invite: InviteCode = {
-    code, createdBy, createdAt: now, usedBy: null, usedByName: null, usedAt: null, label,
+    code, createdBy, createdAt: now, maxUses, useCount: 0, label, uses: [],
   }
 
   if (db) {
     await db.insert(inviteCodesTable).values({
-      code, createdBy, label, usedBy: null, usedByName: null, usedAt: null,
+      code, createdBy, label, maxUses, useCount: 0,
     })
   }
   memInviteCodes.set(code, invite)
-  console.log(`[auth] Invite code generated: ${code} by ${createdBy}`)
+  console.log(`[auth] Invite code generated: ${code} by ${createdBy} (maxUses: ${maxUses})`)
   return invite
 }
 
 export async function validateInviteCode(code: string): Promise<boolean> {
   if (db) {
     const rows = await db.select().from(inviteCodesTable).where(eq(inviteCodesTable.code, code))
-    return rows.length > 0 && rows[0].usedBy === null
+    if (rows.length === 0) return false
+    return rows[0].useCount < rows[0].maxUses
   }
   const invite = memInviteCodes.get(code)
-  return !!invite && invite.usedBy === null
+  return !!invite && invite.useCount < invite.maxUses
 }
 
 export async function redeemInviteCode(code: string, userId: string, username: string): Promise<boolean> {
   if (db) {
     const rows = await db.select().from(inviteCodesTable).where(eq(inviteCodesTable.code, code))
-    if (rows.length === 0 || rows[0].usedBy !== null) return false
+    if (rows.length === 0 || rows[0].useCount >= rows[0].maxUses) return false
     await db.update(inviteCodesTable)
-      .set({ usedBy: userId, usedByName: username, usedAt: new Date() })
+      .set({ useCount: rows[0].useCount + 1 })
       .where(eq(inviteCodesTable.code, code))
+    await db.insert(inviteCodeUsesTable).values({
+      code, usedBy: userId, usedByName: username,
+    })
     return true
   }
   const invite = memInviteCodes.get(code)
-  if (!invite || invite.usedBy !== null) return false
-  invite.usedBy = userId
-  invite.usedByName = username
-  invite.usedAt = Date.now()
+  if (!invite || invite.useCount >= invite.maxUses) return false
+  invite.useCount++
+  invite.uses.push({ usedBy: userId, usedByName: username, usedAt: Date.now() })
   return true
 }
 
 export async function getInviteCodes(): Promise<InviteCode[]> {
   if (db) {
     const rows = await db.select().from(inviteCodesTable).orderBy(desc(inviteCodesTable.createdAt))
+    const useRows = await db.select().from(inviteCodeUsesTable)
+    const usesByCode = new Map<string, InviteCodeUse[]>()
+    for (const u of useRows) {
+      const list = usesByCode.get(u.code) || []
+      list.push({ usedBy: u.usedBy, usedByName: u.usedByName, usedAt: u.usedAt.getTime() })
+      usesByCode.set(u.code, list)
+    }
     return rows.map(r => ({
       code: r.code,
       createdBy: r.createdBy,
       createdAt: r.createdAt.getTime(),
-      usedBy: r.usedBy,
-      usedByName: r.usedByName,
-      usedAt: r.usedAt?.getTime() || null,
+      maxUses: r.maxUses,
+      useCount: r.useCount,
       label: r.label || '',
+      uses: usesByCode.get(r.code) || [],
     }))
   }
   return [...memInviteCodes.values()].sort((a, b) => b.createdAt - a.createdAt)
@@ -125,17 +142,19 @@ export async function getInviteCodes(): Promise<InviteCode[]> {
 
 // --- Users ---
 
-export async function createUser(twitchId: string, username: string, profileImage: string, inviteCode: string): Promise<User> {
+export async function createUser(twitchId: string, username: string, profileImage: string, inviteCode: string, tosAccepted: boolean = false): Promise<User> {
   const role = isDesignatedAdmin(username) ? 'admin' : 'user'
   const now = Date.now()
   const user: User = {
     id: twitchId, username, profileImage, role: role as 'admin' | 'user',
     inviteCode, createdAt: now, lastSeen: now,
+    tosAcceptedAt: tosAccepted ? now : null,
   }
 
   if (db) {
     await db.insert(usersTable).values({
       id: twitchId, username, profileImage, role, inviteCode,
+      tosAcceptedAt: tosAccepted ? new Date() : null,
     }).onConflictDoUpdate({
       target: usersTable.id,
       set: { username, profileImage, role, lastSeen: new Date() },
@@ -155,6 +174,7 @@ export async function getUser(twitchId: string): Promise<User | null> {
       id: r.id, username: r.username, profileImage: r.profileImage || '',
       role: r.role as 'admin' | 'user', inviteCode: r.inviteCode,
       createdAt: r.createdAt.getTime(), lastSeen: r.lastSeen.getTime(),
+      tosAcceptedAt: r.tosAcceptedAt?.getTime() || null,
     }
   }
   return memUsers.get(twitchId) || null
@@ -167,6 +187,7 @@ export async function getAllUsers(): Promise<User[]> {
       id: r.id, username: r.username, profileImage: r.profileImage || '',
       role: r.role as 'admin' | 'user', inviteCode: r.inviteCode,
       createdAt: r.createdAt.getTime(), lastSeen: r.lastSeen.getTime(),
+      tosAcceptedAt: r.tosAcceptedAt?.getTime() || null,
     }))
   }
   return [...memUsers.values()].sort((a, b) => b.lastSeen - a.lastSeen)
@@ -309,16 +330,16 @@ export async function getAuthStats() {
       totalUsers: allUsers.length,
       activeSessions: allSessions.filter(s => new Date() < s.expiresAt).length,
       totalInvites: allInvites.length,
-      usedInvites: allInvites.filter(i => i.usedBy !== null).length,
-      availableInvites: allInvites.filter(i => i.usedBy === null).length,
+      usedInvites: allInvites.filter(i => i.useCount >= i.maxUses).length,
+      availableInvites: allInvites.filter(i => i.useCount < i.maxUses).length,
     }
   }
   return {
     totalUsers: memUsers.size,
     activeSessions: memSessions.size,
     totalInvites: memInviteCodes.size,
-    usedInvites: [...memInviteCodes.values()].filter(i => i.usedBy !== null).length,
-    availableInvites: [...memInviteCodes.values()].filter(i => i.usedBy === null).length,
+    usedInvites: [...memInviteCodes.values()].filter(i => i.useCount >= i.maxUses).length,
+    availableInvites: [...memInviteCodes.values()].filter(i => i.useCount < i.maxUses).length,
   }
 }
 

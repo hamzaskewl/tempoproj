@@ -1,8 +1,8 @@
-import { onSpike, getRecentMessages, getVodTimestamp, getVodUrl, setActiveChannel, removeActiveChannel } from './firehose.js'
+import { onSpike, getRecentMessages, getVodTimestamp, getVodUrl, setActiveChannel, removeActiveChannel, isStreamLive } from './firehose.js'
 import { classifySpikeDirect, classifySpike, hasDirectAPI } from './summarize.js'
 import { createClip, hasTwitchAuth } from './clip.js'
 import { db } from './db/index.js'
-import { moments as momentsTable, watchedChannels as watchedTable } from './db/schema.js'
+import { moments as momentsTable, watchedChannels as watchedTable, userChannels as userChannelsTable } from './db/schema.js'
 import { eq, desc, and, sql } from 'drizzle-orm'
 
 export interface Moment {
@@ -29,12 +29,26 @@ export interface Moment {
   chatSnapshot: string[]
 }
 
+export interface UserChannel {
+  id: number
+  userId: string
+  channel: string
+  addedAt: number
+  confirmed: boolean
+  confirmedAt: number | null
+}
+
 // In-memory cache for recent moments (fast reads)
 const memMoments: Moment[] = []
 let nextMemId = 1
 
-// Watched channels (synced to DB)
+// Watched channels (synced to DB) — global system watchlist
 const watchedChannelsSet = new Set<string>()
+
+// Per-user channels (in-memory cache)
+const memUserChannels = new Map<string, UserChannel[]>()
+
+const MAX_USER_CHANNELS = 3
 
 export async function initWatchedChannels() {
   if (db) {
@@ -46,8 +60,31 @@ export async function initWatchedChannels() {
     if (rows.length > 0) {
       console.log(`[moments] Restored ${rows.length} watched channels from DB`)
     }
+
+    // Load user channels and activate them
+    const ucRows = await db.select().from(userChannelsTable)
+    for (const r of ucRows) {
+      const list = memUserChannels.get(r.userId) || []
+      list.push({
+        id: r.id, userId: r.userId, channel: r.channel,
+        addedAt: r.addedAt.getTime(), confirmed: r.confirmed,
+        confirmedAt: r.confirmedAt?.getTime() || null,
+      })
+      memUserChannels.set(r.userId, list)
+
+      // Activate confirmed channels
+      if (r.confirmed) {
+        watchedChannelsSet.add(r.channel)
+        setActiveChannel(r.channel)
+      }
+    }
+    if (ucRows.length > 0) {
+      console.log(`[moments] Restored ${ucRows.length} user channel slots from DB`)
+    }
   }
 }
+
+// --- Global watchlist (system-level, backwards compat) ---
 
 export async function watchChannel(channel: string) {
   const ch = channel.toLowerCase()
@@ -71,6 +108,125 @@ export async function unwatchChannel(channel: string) {
 export function getWatchedChannels() {
   return [...watchedChannelsSet]
 }
+
+// --- Per-user channel management ---
+
+export async function getUserChannels(userId: string): Promise<UserChannel[]> {
+  if (db) {
+    const rows = await db.select().from(userChannelsTable).where(eq(userChannelsTable.userId, userId))
+    return rows.map(r => ({
+      id: r.id, userId: r.userId, channel: r.channel,
+      addedAt: r.addedAt.getTime(), confirmed: r.confirmed,
+      confirmedAt: r.confirmedAt?.getTime() || null,
+    }))
+  }
+  return memUserChannels.get(userId) || []
+}
+
+export async function addUserChannel(userId: string, channel: string): Promise<{ ok: boolean; error?: string; channels?: UserChannel[] }> {
+  const ch = channel.toLowerCase()
+
+  const existing = await getUserChannels(userId)
+  if (existing.length >= MAX_USER_CHANNELS) {
+    return { ok: false, error: `Maximum ${MAX_USER_CHANNELS} channels allowed. Remove one first.` }
+  }
+  if (existing.some(c => c.channel === ch)) {
+    return { ok: false, error: `Already watching ${ch}` }
+  }
+
+  const uc: UserChannel = {
+    id: 0, userId, channel: ch,
+    addedAt: Date.now(), confirmed: false, confirmedAt: null,
+  }
+
+  if (db) {
+    const rows = await db.insert(userChannelsTable).values({
+      userId, channel: ch, confirmed: false,
+    }).returning({ id: userChannelsTable.id })
+    uc.id = rows[0].id
+  } else {
+    uc.id = Date.now()
+  }
+
+  const list = memUserChannels.get(userId) || []
+  list.push(uc)
+  memUserChannels.set(userId, list)
+
+  // Start tracking (but not auto-clipping until confirmed)
+  setActiveChannel(ch)
+
+  console.log(`[user-ch] ${userId} added channel: ${ch}`)
+  return { ok: true, channels: await getUserChannels(userId) }
+}
+
+export async function removeUserChannel(userId: string, channel: string): Promise<{ ok: boolean; channels?: UserChannel[] }> {
+  const ch = channel.toLowerCase()
+
+  if (db) {
+    await db.delete(userChannelsTable).where(
+      and(eq(userChannelsTable.userId, userId), eq(userChannelsTable.channel, ch))
+    )
+  }
+
+  const list = memUserChannels.get(userId) || []
+  memUserChannels.set(userId, list.filter(c => c.channel !== ch))
+
+  // Check if any other user still watches this channel
+  const stillWatched = await isChannelWatchedByAnyone(ch)
+  if (!stillWatched && !watchedChannelsSet.has(ch)) {
+    removeActiveChannel(ch)
+  }
+
+  console.log(`[user-ch] ${userId} removed channel: ${ch}`)
+  return { ok: true, channels: await getUserChannels(userId) }
+}
+
+export async function confirmUserChannel(userId: string, channel: string): Promise<{ ok: boolean; error?: string }> {
+  const ch = channel.toLowerCase()
+  const channels = await getUserChannels(userId)
+  const uc = channels.find(c => c.channel === ch)
+  if (!uc) return { ok: false, error: 'Channel not in your list' }
+
+  // Check if stream is live
+  const live = await isStreamLive(ch)
+  if (!live) return { ok: false, error: `${ch} is not currently live. You can only confirm live channels.` }
+
+  if (db) {
+    await db.update(userChannelsTable)
+      .set({ confirmed: true, confirmedAt: new Date() })
+      .where(and(eq(userChannelsTable.userId, userId), eq(userChannelsTable.channel, ch)))
+  }
+
+  // Update in-memory
+  const list = memUserChannels.get(userId) || []
+  const item = list.find(c => c.channel === ch)
+  if (item) {
+    item.confirmed = true
+    item.confirmedAt = Date.now()
+  }
+
+  // Activate for auto-clipping
+  watchedChannelsSet.add(ch)
+  setActiveChannel(ch)
+
+  console.log(`[user-ch] ${userId} confirmed channel: ${ch} (now auto-clipping)`)
+  return { ok: true }
+}
+
+async function isChannelWatchedByAnyone(channel: string): Promise<boolean> {
+  if (db) {
+    const rows = await db.select({ count: sql<number>`count(*)` })
+      .from(userChannelsTable)
+      .where(and(eq(userChannelsTable.channel, channel), eq(userChannelsTable.confirmed, true)))
+    return Number(rows[0]?.count || 0) > 0
+  }
+  for (const list of memUserChannels.values()) {
+    if (list.some(c => c.channel === channel && c.confirmed)) return true
+  }
+  return false
+}
+
+// --- Moment storage ---
 
 async function saveMoment(moment: Moment): Promise<number> {
   if (db) {

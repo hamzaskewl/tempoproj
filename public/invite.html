@@ -70,6 +70,12 @@
     }
     input[type="text"]:focus { border-color: #333; }
     input[type="text"]::placeholder { color: #222; letter-spacing: 0; }
+    .prefill-note {
+      font-size: 10px;
+      color: #22c55e;
+      margin-top: 6px;
+      display: none;
+    }
     .submit-btn {
       width: 100%;
       padding: 14px 24px;
@@ -123,6 +129,7 @@
     <div class="input-wrap">
       <label>invite code</label>
       <input type="text" id="inviteCode" placeholder="enter your 16-character code" maxlength="16" autocomplete="off" spellcheck="false">
+      <div class="prefill-note" id="prefillNote">code auto-filled from your invite link</div>
     </div>
 
     <button class="submit-btn" id="submitBtn" onclick="submitCode()" disabled>
@@ -145,6 +152,7 @@
     const pendingToken = params.get('token')
     const pendingName = params.get('name')
     const pendingAvatar = params.get('avatar')
+    const prefillCode = params.get('prefill')
 
     if (pendingName) {
       document.getElementById('userName').textContent = pendingName
@@ -153,7 +161,7 @@
     }
 
     if (params.get('error') === 'invalid_invite') {
-      errorBox.textContent = 'Invalid or already-used invite code. Try again.'
+      errorBox.textContent = 'Invalid or exhausted invite code. Try again or enter a different code.'
       errorBox.style.display = 'block'
     }
 
@@ -162,10 +170,23 @@
       window.location.href = '/login.html'
     }
 
+    // Auto-fill from URL param but keep field editable
+    if (prefillCode) {
+      const cleaned = prefillCode.replace(/[^a-fA-F0-9]/g, '').slice(0, 16)
+      if (cleaned.length > 0) {
+        input.value = cleaned
+        btn.disabled = cleaned.length < 16
+        if (cleaned.length >= 16) {
+          document.getElementById('prefillNote').style.display = 'block'
+        }
+      }
+    }
+
     input.addEventListener('input', () => {
       const val = input.value.replace(/[^a-fA-F0-9]/g, '')
       input.value = val
       btn.disabled = val.length < 16
+      document.getElementById('prefillNote').style.display = 'none'
     })
 
     function submitCode() {

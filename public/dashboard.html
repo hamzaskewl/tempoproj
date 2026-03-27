@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>clippy — dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+      background: #0a0a0a;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+
+    /* ─── Topbar ─── */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 32px; border-bottom: 1px solid #141414;
+      background: #0d0d0d; position: sticky; top: 0; z-index: 100;
+    }
+    .topbar-left { display: flex; align-items: center; gap: 24px; }
+    .logo { font-size: 15px; font-weight: 600; letter-spacing: 0.5px; }
+    .topbar nav a {
+      font-size: 12px; color: #444; text-decoration: none; margin-left: 16px;
+      padding: 4px 0; border-bottom: 2px solid transparent;
+    }
+    .topbar nav a:hover { color: #999; }
+    .topbar nav a.active { color: #e0e0e0; border-bottom-color: #9146ff; }
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    .topbar-right .user-name { font-size: 12px; color: #666; }
+    .topbar-right .avatar { width: 24px; height: 24px; border-radius: 50%; }
+    .status-pill {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 11px; color: #555; padding: 4px 10px;
+      border: 1px solid #1a1a1a; border-radius: 20px;
+    }
+    .dot { width: 6px; height: 6px; border-radius: 50%; }
+    .dot.live { background: #22c55e; }
+    .dot.off { background: #ef4444; }
+    .logout-btn {
+      background: none; border: 1px solid #222; color: #555; font-family: inherit;
+      font-size: 11px; padding: 4px 12px; border-radius: 4px; cursor: pointer;
+    }
+    .logout-btn:hover { border-color: #444; color: #999; }
+
+    /* ─── Layout ─── */
+    .layout {
+      display: grid; grid-template-columns: 1fr 340px;
+      min-height: calc(100vh - 53px);
+    }
+    .main { padding: 24px 32px; overflow-y: auto; }
+    .sidebar {
+      border-left: 1px solid #141414; padding: 24px;
+      overflow-y: auto; background: #0c0c0c;
+    }
+    @media (max-width: 1024px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { border-left: none; border-top: 1px solid #141414; }
+    }
+
+    /* ─── Section titles ─── */
+    .section-title {
+      font-size: 10px; font-weight: 500; text-transform: uppercase;
+      letter-spacing: 2px; color: #444; margin-bottom: 12px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-title .count {
+      background: #1a1a1a; color: #555; font-size: 10px;
+      padding: 1px 6px; border-radius: 3px;
+    }
+
+    /* ─── Free tier banner ─── */
+    .free-banner {
+      background: #0e0e0e; border: 1px solid #1a1a1a; border-radius: 8px;
+      padding: 14px 18px; margin-bottom: 24px;
+      font-size: 11px; color: #555; line-height: 1.6;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .free-banner .icon { font-size: 16px; color: #9146ff; flex-shrink: 0; }
+    .free-banner b { color: #888; }
+
+    /* ─── Channel slots ─── */
+    .slots-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 16px;
+    }
+    .slots-count { font-size: 11px; color: #555; }
+    .slots-count b { color: #fff; }
+
+    .channel-slots { display: flex; flex-direction: column; gap: 8px; margin-bottom: 28px; }
+
+    .slot-card {
+      background: #111; border: 1px solid #161616; border-radius: 8px;
+      padding: 16px 20px;
+    }
+    .slot-card.empty-slot {
+      border-style: dashed; border-color: #1a1a1a;
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px; color: #222; font-size: 12px;
+    }
+    .slot-top {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 8px;
+    }
+    .slot-name { font-size: 14px; font-weight: 600; color: #fff; }
+    .slot-actions { display: flex; gap: 6px; }
+    .slot-btn {
+      background: #1a1a1a; color: #666; border: 1px solid #222; border-radius: 4px;
+      padding: 4px 10px; font-family: inherit; font-size: 10px; cursor: pointer;
+    }
+    .slot-btn:hover { background: #222; color: #999; }
+    .slot-btn.confirm-btn { color: #22c55e; border-color: #22c55e44; }
+    .slot-btn.confirm-btn:hover { background: #0a1a0a; }
+    .slot-btn.remove-btn { color: #ef4444; border-color: #ef444444; }
+    .slot-btn.remove-btn:hover { background: #1a0a0a; }
+    .slot-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .slot-status {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11px; color: #555;
+    }
+    .slot-status .live-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+    }
+    .slot-status .live-dot.on { background: #22c55e; }
+    .slot-status .live-dot.off { background: #333; }
+    .slot-status .confirmed { color: #22c55e; }
+    .slot-status .pending { color: #f59e0b; }
+    .slot-stats { color: #444; font-size: 10px; margin-top: 4px; }
+    .slot-stats b { color: #888; }
+
+    /* ─── Add channel ─── */
+    .add-bar {
+      display: flex; gap: 8px; margin-bottom: 28px;
+    }
+    .add-bar input {
+      flex: 1; background: #111; border: 1px solid #1a1a1a; border-radius: 6px;
+      padding: 12px 16px; color: #fff; font-family: inherit; font-size: 13px; outline: none;
+    }
+    .add-bar input:focus { border-color: #333; }
+    .add-bar input::placeholder { color: #222; }
+    .add-bar button {
+      background: #1a1a1a; color: #888; border: 1px solid #222; border-radius: 6px;
+      padding: 12px 20px; font-family: inherit; font-size: 12px; cursor: pointer;
+    }
+    .add-bar button:hover { background: #222; color: #fff; }
+    .add-bar button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .error-msg {
+      background: #1a0a0a; border: 1px solid #331111; border-radius: 6px;
+      padding: 10px 14px; font-size: 11px; color: #f87171; margin-bottom: 16px;
+      display: none;
+    }
+
+    /* ─── Spike cards ─── */
+    .spikes-list { display: flex; flex-direction: column; gap: 4px; }
+    .spike-card {
+      display: grid;
+      grid-template-columns: 140px 70px 60px 1fr 80px;
+      align-items: center; gap: 12px;
+      padding: 14px 16px; background: #111; border: 1px solid #161616;
+      border-radius: 6px; font-size: 12px; cursor: pointer; transition: all 0.1s;
+    }
+    .spike-card:hover { background: #151515; border-color: #222; }
+    .spike-card.has-clip { border-left: 3px solid #22c55e; }
+    .channel-col { display: flex; align-items: center; gap: 8px; }
+    .channel-name { font-weight: 600; color: #fff; font-size: 13px; }
+    .viewers { color: #444; font-size: 10px; }
+    .jump { font-weight: 700; font-size: 13px; }
+    .jump.high { color: #22c55e; }
+    .jump.mega { color: #f59e0b; }
+    .vibe-tag {
+      font-size: 10px; padding: 3px 8px; border-radius: 4px;
+      text-align: center; font-weight: 500;
+    }
+    .vibe-tag.funny { background: #1a1a0a; color: #fbbf24; }
+    .vibe-tag.hype { background: #0a1a0a; color: #22c55e; }
+    .vibe-tag.awkward { background: #1a0a1a; color: #c084fc; }
+    .vibe-tag.win { background: #0a1a1a; color: #38bdf8; }
+    .vibe-tag.loss { background: #1a0a0a; color: #f87171; }
+    .vibe-tag.rage { background: #1a0a0a; color: #ef4444; }
+    .vibe-tag.shock { background: #1a1a0a; color: #fb923c; }
+    .vibe-tag.clutch { background: #0a1a0a; color: #34d399; }
+    .vibe-tag.wholesome { background: #0a1a1a; color: #67e8f9; }
+    .vibe-tag.drama { background: #1a0a1a; color: #e879f9; }
+    .vibe-tag.sad { background: #1a0a0a; color: #f87171; }
+    .vibe-tag.neutral { background: #1a1a1a; color: #555; }
+    .vibe-tag.error { background: #1a0a0a; color: #ef4444; }
+    .desc-col { color: #555; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .time-col { color: #333; font-size: 10px; text-align: right; }
+
+    /* Detail expand */
+    .spike-detail {
+      display: none; padding: 16px; background: #0e0e0e;
+      border: 1px solid #1a1a1a; border-top: none;
+      border-radius: 0 0 6px 6px; margin-top: -4px; margin-bottom: 4px;
+    }
+    .spike-detail.open { display: block; }
+    .detail-actions { display: flex; gap: 8px; margin-bottom: 12px; }
+    .detail-actions a {
+      font-size: 10px; padding: 4px 10px; background: #1a1a1a; color: #666;
+      border: 1px solid #222; border-radius: 4px; text-decoration: none; font-family: inherit;
+    }
+    .detail-actions a:hover { background: #222; color: #999; }
+    .detail-actions a.clip-link { color: #22c55e; border-color: #22c55e44; }
+    .detail-desc { font-size: 12px; color: #888; margin-bottom: 12px; line-height: 1.6; }
+    .chat-snapshot {
+      font-size: 11px; color: #444; line-height: 1.7;
+      max-height: 180px; overflow-y: auto;
+      padding: 10px 12px; background: #0a0a0a; border-radius: 4px;
+    }
+    .chat-snapshot .u { color: #555; }
+
+    /* ─── Sidebar ─── */
+    .sidebar-section { margin-bottom: 28px; }
+    .ch-card {
+      padding: 12px 14px; background: #111; border: 1px solid #161616;
+      border-radius: 6px; font-size: 11px; margin-bottom: 6px;
+    }
+    .ch-card .ch-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .ch-card .ch-name { font-size: 12px; font-weight: 600; color: #fff; }
+    .ch-card .ch-viewers { font-size: 10px; color: #444; }
+    .ch-card .ch-stats { display: flex; gap: 12px; color: #555; }
+    .ch-card .ch-stats b { color: #ccc; font-weight: 500; }
+    .ch-card.spiking { border-color: #f59e0b44; }
+
+    .trending-list { display: flex; flex-direction: column; gap: 4px; }
+    .trend-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 14px; background: #111; border: 1px solid #161616;
+      border-radius: 6px; font-size: 12px; cursor: pointer;
+    }
+    .trend-row:hover { border-color: #333; }
+    .trend-row .ch { font-weight: 500; color: #fff; }
+    .trend-row .rate { color: #555; font-size: 11px; }
+    .trend-row .rate b { color: #ccc; }
+
+    .empty { color: #1a1a1a; font-size: 12px; padding: 32px 0; text-align: center; }
+    .pulse { animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+    @media (max-width: 768px) {
+      .topbar { padding: 14px 16px; }
+      .main { padding: 20px 16px; }
+      .sidebar { padding: 20px 16px; }
+      .spike-card { grid-template-columns: 1fr auto auto; }
+      .spike-card .desc-col, .spike-card .time-col { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="logo">clippy</div>
+      <nav id="navLinks">
+        <a href="/">home</a>
+        <a href="/dashboard.html" class="active">dashboard</a>
+        <a href="/clips.html">clips</a>
+      </nav>
+    </div>
+    <div class="topbar-right">
+      <div class="status-pill">
+        <span class="dot" id="statusDot"></span>
+        <span id="statusText">connecting...</span>
+      </div>
+      <img class="avatar" id="userAvatar" src="" alt="" style="display:none">
+      <span class="user-name" id="userName"></span>
+      <button class="logout-btn" onclick="logout()">logout</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- Main content -->
+    <div class="main">
+      <!-- Free tier info -->
+      <div class="free-banner">
+        <span class="icon">*</span>
+        <span>
+          <b>Free early access.</b> You have <b>3 channel slots</b> for live auto-clipping.
+          Add a channel, then <b>confirm</b> it when the stream goes live. Clips are created on your Twitch account.
+          Channels persist across sessions but must be re-confirmed each time a stream starts.
+        </span>
+      </div>
+
+      <!-- Error message -->
+      <div class="error-msg" id="errorMsg"></div>
+
+      <!-- Channel slots -->
+      <div class="slots-header">
+        <div class="section-title">your channels</div>
+        <div class="slots-count"><b id="slotUsed">0</b> / <b>3</b> slots used</div>
+      </div>
+
+      <div class="add-bar" id="addBar">
+        <input type="text" id="channelInput" placeholder="add a channel (e.g. xqc, pokimane)..." onkeydown="if(event.key==='Enter')addChannel()">
+        <button onclick="addChannel()" id="addBtn">add</button>
+      </div>
+
+      <div class="channel-slots" id="channelSlots">
+        <div class="slot-card empty-slot">loading your channels...</div>
+      </div>
+
+      <!-- Live spikes from your channels -->
+      <div class="section-title">your live spikes <span class="count" id="spikesBadge">0</span></div>
+      <div class="spikes-list" id="spikesList">
+        <div class="empty"><span class="pulse">add channels above to start watching</span></div>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-section" id="channelStatsSection" style="display:none">
+        <div class="section-title">live stats</div>
+        <div id="channelStats"></div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="section-title">trending</div>
+        <div class="trending-list" id="trendingList">
+          <div class="empty" style="padding:16px 0">loading...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentUser = null
+    let userChannels = []
+    const spikes = []
+    let expandedId = null
+
+    // ─── Auth gate ───
+    fetch('/auth/me').then(r => r.json()).then(d => {
+      if (!d.authenticated) return window.location.href = '/login.html'
+      currentUser = d.user
+      document.getElementById('userName').textContent = d.user.username
+      if (d.user.profileImage) {
+        const av = document.getElementById('userAvatar')
+        av.src = d.user.profileImage
+        av.style.display = 'block'
+      }
+      if (d.user.role === 'admin') {
+        const nav = document.getElementById('navLinks')
+        const a = document.createElement('a')
+        a.href = '/admin.html'
+        a.textContent = 'admin'
+        nav.appendChild(a)
+      }
+      init()
+    }).catch(() => window.location.href = '/login.html')
+
+    function init() {
+      loadChannels()
+
+      // SSE for spikes
+      const sse = new EventSource('/alerts')
+      sse.onmessage = (e) => {
+        const data = JSON.parse(e.data)
+        if (data.type === 'connected') {
+          document.getElementById('statusDot').className = 'dot live'
+          document.getElementById('statusText').textContent = 'live'
+        }
+        if (data.type === 'spike') {
+          // Only show spikes from user's channels
+          const myChannels = userChannels.map(c => c.channel)
+          if (myChannels.length > 0 && !myChannels.includes(data.channel.toLowerCase())) return
+          if (myChannels.length === 0) return
+
+          const id = Date.now() + '' + Math.random()
+          spikes.unshift({ ...data, id, receivedAt: Date.now(), mood: null, description: null, chatSnapshot: data.chatSnapshot || null, clipUrl: null })
+          if (spikes.length > 30) spikes.pop()
+          renderSpikes()
+
+          // Fetch moment details
+          setTimeout(() => fetchMoment(id, data.channel), 4000)
+          setTimeout(() => fetchMoment(id, data.channel), 10000)
+        }
+      }
+      sse.onerror = () => {
+        document.getElementById('statusDot').className = 'dot off'
+        document.getElementById('statusText').textContent = 'disconnected'
+      }
+
+      setInterval(() => renderSpikes(), 10000)
+      setInterval(refreshHealth, 5000)
+      setInterval(refreshTrending, 15000)
+      setInterval(refreshChannelStats, 3000)
+      setInterval(loadChannels, 30000) // refresh slots periodically
+      refreshHealth()
+      refreshTrending()
+    }
+
+    // ─── Channel management ───
+
+    async function loadChannels() {
+      try {
+        const res = await fetch('/my/channels')
+        if (!res.ok) return
+        const data = await res.json()
+        userChannels = data.channels || []
+        renderSlots()
+        refreshChannelStats()
+      } catch {}
+    }
+
+    function renderSlots() {
+      const el = document.getElementById('channelSlots')
+      document.getElementById('slotUsed').textContent = userChannels.length
+
+      // Disable add if at max
+      const addBtn = document.getElementById('addBtn')
+      const addInput = document.getElementById('channelInput')
+      if (userChannels.length >= 3) {
+        addBtn.disabled = true
+        addInput.placeholder = 'all 3 slots in use — remove one first'
+        addInput.disabled = true
+      } else {
+        addBtn.disabled = false
+        addInput.placeholder = 'add a channel (e.g. xqc, pokimane)...'
+        addInput.disabled = false
+      }
+
+      if (userChannels.length === 0) {
+        el.innerHTML = `
+          <div class="slot-card empty-slot">slot 1 — empty</div>
+          <div class="slot-card empty-slot">slot 2 — empty</div>
+          <div class="slot-card empty-slot">slot 3 — empty</div>
+        `
+        return
+      }
+
+      let html = userChannels.map(ch => `
+        <div class="slot-card">
+          <div class="slot-top">
+            <span class="slot-name">${esc(ch.channel)}</span>
+            <div class="slot-actions">
+              ${!ch.confirmed
+                ? `<button class="slot-btn confirm-btn" onclick="confirmChannel('${ch.channel}')">confirm (must be live)</button>`
+                : `<span style="font-size:10px;color:#22c55e">confirmed</span>`
+              }
+              <button class="slot-btn remove-btn" onclick="removeChannel('${ch.channel}')">remove</button>
+            </div>
+          </div>
+          <div class="slot-status">
+            <span class="live-dot" id="live-${ch.channel}"></span>
+            <span id="status-${ch.channel}">${ch.confirmed ? 'auto-clipping active' : 'not confirmed — confirm when stream is live'}</span>
+          </div>
+          <div class="slot-stats" id="stats-${ch.channel}"></div>
+        </div>
+      `).join('')
+
+      // Fill remaining empty slots
+      for (let i = userChannels.length; i < 3; i++) {
+        html += `<div class="slot-card empty-slot">slot ${i + 1} — empty</div>`
+      }
+
+      el.innerHTML = html
+    }
+
+    async function addChannel() {
+      const input = document.getElementById('channelInput')
+      const ch = input.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '')
+      input.value = ''
+      if (!ch) return
+      hideError()
+
+      try {
+        const res = await fetch('/my/channels', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ channel: ch }),
+        })
+        const data = await res.json()
+        if (!res.ok) { showError(data.error || 'Failed to add channel'); return }
+        userChannels = data.channels || []
+        renderSlots()
+
+        // Also start tracking for live stats
+        fetch(`/track/${ch}`, { method: 'POST' })
+      } catch (err) {
+        showError('Failed to add channel')
+      }
+    }
+
+    async function removeChannel(ch) {
+      hideError()
+      try {
+        const res = await fetch(`/my/channels/${ch}`, { method: 'DELETE' })
+        const data = await res.json()
+        userChannels = data.channels || []
+        renderSlots()
+        fetch(`/track/${ch}`, { method: 'DELETE' })
+      } catch {}
+    }
+
+    async function confirmChannel(ch) {
+      hideError()
+      try {
+        const res = await fetch(`/my/channels/${ch}/confirm`, { method: 'POST' })
+        const data = await res.json()
+        if (!res.ok) {
+          showError(data.error || 'Failed to confirm')
+          return
+        }
+        userChannels = data.channels || []
+        renderSlots()
+        // Activate clip watching
+        fetch(`/watch-clip/${ch}`, { method: 'POST' })
+      } catch {
+        showError('Failed to confirm channel')
+      }
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('errorMsg')
+      el.textContent = msg
+      el.style.display = 'block'
+      setTimeout(hideError, 5000)
+    }
+    function hideError() {
+      document.getElementById('errorMsg').style.display = 'none'
+    }
+
+    // ─── Spikes ───
+
+    function renderSpikes() {
+      const el = document.getElementById('spikesList')
+      document.getElementById('spikesBadge').textContent = spikes.length
+
+      if (spikes.length === 0) {
+        const myChannels = userChannels.filter(c => c.confirmed).map(c => c.channel)
+        el.innerHTML = myChannels.length === 0
+          ? '<div class="empty"><span class="pulse">add and confirm channels to start watching</span></div>'
+          : `<div class="empty"><span class="pulse">watching ${myChannels.join(', ')}...</span></div>`
+        return
+      }
+      el.innerHTML = spikes.map(s => {
+        const jumpClass = s.jumpPercent > 150 ? 'mega' : s.jumpPercent > 50 ? 'high' : ''
+        const ago = timeAgo(s.receivedAt)
+        const moodTag = s.mood || s.vibe
+        const isOpen = expandedId === s.id
+        return `
+          <div class="spike-card ${s.clipUrl ? 'has-clip' : ''}" onclick="toggleSpike('${s.id}')">
+            <div class="channel-col">
+              <span class="channel-name">${esc(s.channel)}</span>
+              ${s.viewers ? `<span class="viewers">${(s.viewers/1000).toFixed(1)}k</span>` : ''}
+            </div>
+            <span class="jump ${jumpClass}">+${s.jumpPercent}%</span>
+            <span class="vibe-tag ${moodTag}">${moodTag}</span>
+            <span class="desc-col">${esc(s.description || '')}</span>
+            <span class="time-col">${ago}</span>
+          </div>
+          <div class="spike-detail ${isOpen ? 'open' : ''}" id="detail-${s.id}">
+            <div class="detail-actions">
+              ${s.clipUrl ? `<a class="clip-link" href="${s.clipUrl}" target="_blank" onclick="event.stopPropagation()">view clip</a>` : ''}
+              ${s.vodUrl ? `<a href="${s.vodUrl}" target="_blank" onclick="event.stopPropagation()">vod</a>` : ''}
+            </div>
+            ${s.description ? `<div class="detail-desc"><b>${esc(s.mood || '')}</b> — ${esc(s.description)}</div>` : ''}
+            ${s.chatSnapshot ? `
+              <div class="chat-snapshot">
+                ${s.chatSnapshot.slice(0, 15).map(m => {
+                  const idx = m.indexOf(': ')
+                  return idx > -1
+                    ? `<div><span class="u">${esc(m.slice(0,idx))}:</span> ${esc(m.slice(idx+2))}</div>`
+                    : `<div>${esc(m)}</div>`
+                }).join('')}
+              </div>
+            ` : '<div style="color:#222;font-size:11px">loading chat...</div>'}
+          </div>
+        `
+      }).join('')
+    }
+
+    async function fetchMoment(spikeId, channel) {
+      const spike = spikes.find(s => s.id === spikeId)
+      if (!spike) return
+      try {
+        const res = await fetch(`/moments/latest/${channel}`)
+        if (!res.ok) return
+        const m = await res.json()
+        if (m.clipUrl) spike.clipUrl = m.clipUrl
+        if (m.mood && m.mood !== 'error') { spike.mood = m.mood; spike.description = m.description }
+        if (m.chatSnapshot && m.chatSnapshot.length > (spike.chatSnapshot?.length || 0)) spike.chatSnapshot = m.chatSnapshot
+        renderSpikes()
+      } catch {}
+    }
+
+    function toggleSpike(id) {
+      expandedId = expandedId === id ? null : id
+      renderSpikes()
+    }
+
+    // ─── Sidebar ───
+
+    async function refreshChannelStats() {
+      const section = document.getElementById('channelStatsSection')
+      const el = document.getElementById('channelStats')
+      const confirmed = userChannels.filter(c => c.confirmed)
+      if (confirmed.length === 0) { section.style.display = 'none'; return }
+      section.style.display = 'block'
+
+      const cards = await Promise.all(confirmed.map(async ch => {
+        try {
+          const res = await fetch(`/channel-stats/${ch.channel}`)
+          if (!res.ok) return `<div class="ch-card"><div class="ch-top"><span class="ch-name">${esc(ch.channel)}</span></div><div class="ch-stats" style="color:#222">warming up...</div></div>`
+          const d = await res.json()
+
+          // Update live status in slot card
+          const liveDot = document.getElementById(`live-${ch.channel}`)
+          const statusEl = document.getElementById(`status-${ch.channel}`)
+          const statsEl = document.getElementById(`stats-${ch.channel}`)
+          if (liveDot) liveDot.className = 'live-dot ' + (d.live ? 'on' : 'off')
+          if (statusEl) statusEl.textContent = d.live ? 'auto-clipping active' : 'stream offline'
+          if (statsEl && d.rate) statsEl.innerHTML = `<b>${d.rate}</b> msg/s &middot; base <b>${d.baseline}</b>${d.isSpike ? ` &middot; <span style="color:#f59e0b">+${d.jumpPercent}%</span>` : ''}`
+
+          return `
+            <div class="ch-card ${d.isSpike ? 'spiking' : ''}">
+              <div class="ch-top">
+                <span class="ch-name">${esc(ch.channel)}</span>
+                ${d.viewers ? `<span class="ch-viewers">${(d.viewers/1000).toFixed(1)}k</span>` : ''}
+              </div>
+              <div class="ch-stats">
+                <span><b>${d.rate}</b> msg/s</span>
+                <span>base <b>${d.baseline}</b></span>
+                ${d.isSpike ? `<span style="color:#f59e0b">+${d.jumpPercent}%</span>` : ''}
+              </div>
+            </div>`
+        } catch {
+          return `<div class="ch-card"><div class="ch-top"><span class="ch-name">${esc(ch.channel)}</span></div><div class="ch-stats" style="color:#222">connecting...</div></div>`
+        }
+      }))
+      el.innerHTML = cards.join('')
+    }
+
+    async function refreshHealth() {
+      try {
+        const h = await fetch('/health').then(r => r.json())
+        document.getElementById('statusDot').className = 'dot ' + (h.connected ? 'live' : 'off')
+        document.getElementById('statusText').textContent = h.connected ? 'live' : 'disconnected'
+      } catch {}
+    }
+
+    async function refreshTrending() {
+      try {
+        const data = await fetch('/trending').then(r => r.json())
+        const el = document.getElementById('trendingList')
+        if (!data.channels?.length) { el.innerHTML = '<div class="empty" style="padding:16px 0">no data yet</div>'; return }
+        el.innerHTML = data.channels.map(ch => `
+          <div class="trend-row" onclick="quickAdd('${ch.channel.toLowerCase()}')">
+            <span class="ch">${esc(ch.channel)}</span>
+            <span class="rate"><b>${ch.burst}</b> msg/s <span class="vibe-tag ${ch.vibe}" style="margin-left:6px">${ch.vibe}</span></span>
+          </div>
+        `).join('')
+      } catch {}
+    }
+
+    function quickAdd(ch) {
+      if (userChannels.length >= 3) { showError('All 3 slots in use — remove one first'); return }
+      if (userChannels.some(c => c.channel === ch)) { showError(`Already watching ${ch}`); return }
+      document.getElementById('channelInput').value = ch
+      addChannel()
+    }
+
+    // ─── Utilities ───
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML }
+    function timeAgo(ts) {
+      const s = Math.floor((Date.now() - ts) / 1000)
+      if (s < 60) return `${s}s`
+      if (s < 3600) return `${Math.floor(s/60)}m`
+      return `${Math.floor(s/3600)}h`
+    }
+
+    async function logout() {
+      await fetch('/auth/logout', { method: 'POST' })
+      window.location.href = '/login.html'
+    }
+  </script>
+</body>
+</html>

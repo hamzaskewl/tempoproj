@@ -8,16 +8,24 @@ export const users = pgTable('users', {
   inviteCode: text('invite_code').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   lastSeen: timestamp('last_seen').defaultNow().notNull(),
+  tosAcceptedAt: timestamp('tos_accepted_at'),
 })
 
 export const inviteCodes = pgTable('invite_codes', {
   code: text('code').primaryKey(),
   createdBy: text('created_by').notNull(),
   label: text('label').default(''),
-  usedBy: text('used_by'),
-  usedByName: text('used_by_name'),
+  maxUses: integer('max_uses').notNull().default(1),
+  useCount: integer('use_count').notNull().default(0),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-  usedAt: timestamp('used_at'),
+})
+
+export const inviteCodeUses = pgTable('invite_code_uses', {
+  id: serial('id').primaryKey(),
+  code: text('code').notNull(),
+  usedBy: text('used_by').notNull(),
+  usedByName: text('used_by_name').notNull(),
+  usedAt: timestamp('used_at').defaultNow().notNull(),
 })
 
 export const sessions = pgTable('sessions', {
@@ -54,4 +62,13 @@ export const moments = pgTable('moments', {
 export const watchedChannels = pgTable('watched_channels', {
   channel: text('channel').primaryKey(),
   addedAt: timestamp('added_at').defaultNow().notNull(),
+})
+
+export const userChannels = pgTable('user_channels', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  channel: text('channel').notNull(),
+  addedAt: timestamp('added_at').defaultNow().notNull(),
+  confirmed: boolean('confirmed').notNull().default(false),
+  confirmedAt: timestamp('confirmed_at'),
 })
