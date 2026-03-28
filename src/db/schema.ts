@@ -38,6 +38,7 @@ export const sessions = pgTable('sessions', {
 export const moments = pgTable('moments', {
   id: serial('id').primaryKey(),
   channel: text('channel').notNull(),
+  userId: text('user_id'),
   timestamp: timestamp('timestamp').notNull(),
   spikeAt: bigint('spike_at', { mode: 'number' }).notNull(),
   clipStart: text('clip_start'),

@@ -125,8 +125,9 @@ export async function initDatabase() {
       )
     `
 
-    // Add tos_accepted_at to users if missing
+    // Migrations
     try { await client`ALTER TABLE users ADD COLUMN IF NOT EXISTS tos_accepted_at TIMESTAMP` } catch {}
+    try { await client`ALTER TABLE moments ADD COLUMN IF NOT EXISTS user_id TEXT` } catch {}
 
     console.log('[db] Tables initialized')
   } catch (err: any) {

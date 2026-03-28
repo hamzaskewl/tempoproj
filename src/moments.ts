@@ -8,6 +8,7 @@ import { eq, desc, and, sql } from 'drizzle-orm'
 export interface Moment {
   id: number
   channel: string
+  userId: string | null
   timestamp: string
   spikeAt: number
   clipStart: string | null
@@ -216,6 +217,17 @@ export async function confirmUserChannel(userId: string, channel: string): Promi
   return { ok: true }
 }
 
+// Find all user IDs who have this channel confirmed
+function getUsersForChannel(channel: string): string[] {
+  const users: string[] = []
+  for (const [userId, list] of memUserChannels) {
+    if (list.some(c => c.channel === channel && c.confirmed)) {
+      users.push(userId)
+    }
+  }
+  return users
+}
+
 async function isChannelWatchedByAnyone(channel: string): Promise<boolean> {
   if (db) {
     const rows = await db.select({ count: sql<number>`count(*)` })
@@ -235,6 +247,7 @@ async function saveMoment(moment: Moment): Promise<number> {
   if (db) {
     const rows = await db.insert(momentsTable).values({
       channel: moment.channel,
+      userId: moment.userId,
       timestamp: new Date(moment.timestamp),
       spikeAt: moment.spikeAt,
       jumpPercent: moment.jumpPercent,
@@ -291,9 +304,14 @@ export function startMomentCapture() {
     const chatSnapshot = getRecentMessages(spike.channel, 50)
     const isWatched = watchedChannelsSet.has(spike.channel.toLowerCase())
 
+    // Find which user(s) own this channel
+    const ownerUsers = getUsersForChannel(spike.channel.toLowerCase())
+    const primaryUserId = ownerUsers.length > 0 ? ownerUsers[0] : null
+
     const moment: Moment = {
       id: memId,
       channel: spike.channel,
+      userId: primaryUserId,
       timestamp: new Date(spike.spikeAt).toISOString(),
       spikeAt: spike.spikeAt,
       clipStart: null, clipEnd: null, clipStartUrl: null, clipEndUrl: null,
@@ -373,7 +391,7 @@ export function startMomentCapture() {
       }
     } catch {}
 
-    // Save to DB
+    // Save to DB — primary user
     try {
       const dbId = await saveMoment(moment)
       moment.id = dbId
@@ -381,9 +399,30 @@ export function startMomentCapture() {
       console.error(`[moments] DB save failed:`, err.message)
     }
 
+    // Save copies for additional users watching the same channel
+    for (const uid of ownerUsers.slice(1)) {
+      try {
+        await saveMoment({ ...moment, userId: uid, id: nextMemId++ })
+      } catch {}
+    }
+
     // Keep max 500 in memory cache
     if (memMoments.length > 500) memMoments.shift()
   })
+}
+
+export async function getMomentsByUser(userId: string, limit: number = 50): Promise<Moment[]> {
+  if (db) {
+    const rows = await db.select().from(momentsTable)
+      .where(eq(momentsTable.userId, userId))
+      .orderBy(desc(momentsTable.id))
+      .limit(limit)
+    return rows.map(rowToMoment)
+  }
+  return memMoments
+    .filter(m => m.userId === userId)
+    .reverse()
+    .slice(0, limit)
 }
 
 export async function getMoments(options?: { channel?: string; clipWorthyOnly?: boolean; limit?: number; offset?: number }): Promise<Moment[]> {
@@ -468,6 +507,7 @@ function rowToMoment(r: any): Moment {
   return {
     id: r.id,
     channel: r.channel,
+    userId: r.userId || null,
     timestamp: r.timestamp instanceof Date ? r.timestamp.toISOString() : r.timestamp,
     spikeAt: Number(r.spikeAt),
     clipStart: r.clipStart, clipEnd: r.clipEnd,

@@ -9,7 +9,7 @@ import { createClient, http } from 'viem'
 import { tempo as tempoChain } from 'viem/chains'
 import { connectFirehose, getTrending, getChannel, getSpikes, getStats, isConnected, getVodTimestamp, getVodUrl, isStreamLive, onSpike, getViewerCount, setActiveChannel, removeActiveChannel } from './firehose.js'
 import { summarizeChannel, classifySpike, classifySpikeDirect, summarizeChannelDirect, getLLMBudget, hasDirectAPI, restoreLLMUsage } from './summarize.js'
-import { startMomentCapture, getMoments, getMomentById, watchChannel, unwatchChannel, getWatchedChannels, getMomentStats, getClippedMoments, initWatchedChannels, getUserChannels, addUserChannel, removeUserChannel, confirmUserChannel } from './moments.js'
+import { startMomentCapture, getMoments, getMomentById, getMomentsByUser, watchChannel, unwatchChannel, getWatchedChannels, getMomentStats, getClippedMoments, initWatchedChannels, getUserChannels, addUserChannel, removeUserChannel, confirmUserChannel } from './moments.js'
 import { setTwitchAuth, getTwitchAuth, createClip, restoreTwitchAuth } from './clip.js'
 import { createUser, getUser, createSession, validateSession, destroySession, generateInviteCode, validateInviteCode, redeemInviteCode, getInviteCodes, getAllUsers, isAdmin, isDesignatedAdmin, checkRateLimit, getSessionCookie, clearSessionCookie, parseSessionToken, getAuthStats, createPendingRegistration, consumePendingRegistration } from './auth.js'
 import { initDatabase } from './db/index.js'
@@ -354,19 +354,11 @@ app.post('/my/channels/:channel/confirm', requireAuth, async (req, res) => {
 
 // --- Per-user moments (all moments for user's channels) ---
 app.get('/my/moments', requireAuth, async (req, res) => {
-  const channels = await getUserChannels((req as any).user.id)
-  const channelNames = channels.map(c => c.channel)
-  if (channelNames.length === 0) return res.json({ moments: [] })
-
+  const userId = (req as any).user.id
   const limit = Math.min(parseInt(req.query.limit as string) || 50, 200)
-  const allMoments = []
-  for (const ch of channelNames) {
-    const m = await getMoments({ channel: ch, limit })
-    allMoments.push(...m)
-  }
-  // Sort by spikeAt descending
-  allMoments.sort((a, b) => b.spikeAt - a.spikeAt)
-  res.json({ moments: allMoments.slice(0, limit), channels: channelNames })
+  const moments = await getMomentsByUser(userId, limit)
+  const channels = await getUserChannels(userId)
+  res.json({ moments, channels: channels.map(c => c.channel) })
 })
 
 // --- Create a clip for a moment ---
