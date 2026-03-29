@@ -500,20 +500,36 @@ export async function getMomentStats(): Promise<{ total: number; clipped: number
   return { total: memMoments.length, clipped, topChannels }
 }
 
-export async function getClippedMoments(limit: number = 20, offset: number = 0): Promise<Moment[]> {
+export async function getClippedMoments(limit: number = 20, offset: number = 0, channel?: string): Promise<Moment[]> {
   if (db) {
-    // Deduplicate by channel+spikeAt — pick the row with the lowest id per unique spike
+    let whereClause = sql`clip_url IS NOT NULL AND id IN (SELECT MIN(id) FROM moments WHERE clip_url IS NOT NULL GROUP BY channel, spike_at)`
+    if (channel) {
+      whereClause = sql`${whereClause} AND channel = ${channel.toLowerCase()}`
+    }
     const rows = await db.select().from(momentsTable)
-      .where(sql`clip_url IS NOT NULL AND id IN (SELECT MIN(id) FROM moments WHERE clip_url IS NOT NULL GROUP BY channel, spike_at)`)
+      .where(whereClause)
       .orderBy(desc(momentsTable.id))
       .limit(limit)
       .offset(offset)
     return rows.map(rowToMoment)
   }
-  return memMoments
-    .filter(m => m.clipUrl)
-    .reverse()
-    .slice(offset, offset + limit)
+  let result = memMoments.filter(m => m.clipUrl)
+  if (channel) result = result.filter(m => m.channel.toLowerCase() === channel.toLowerCase())
+  return result.reverse().slice(offset, offset + limit)
+}
+
+export async function getClippedMomentsCount(channel?: string): Promise<number> {
+  if (db) {
+    let whereClause = sql`clip_url IS NOT NULL AND id IN (SELECT MIN(id) FROM moments WHERE clip_url IS NOT NULL GROUP BY channel, spike_at)`
+    if (channel) {
+      whereClause = sql`${whereClause} AND channel = ${channel.toLowerCase()}`
+    }
+    const rows = await db.select({ count: sql<number>`count(*)` }).from(momentsTable).where(whereClause)
+    return Number(rows[0]?.count || 0)
+  }
+  let result = memMoments.filter(m => m.clipUrl)
+  if (channel) result = result.filter(m => m.channel.toLowerCase() === channel.toLowerCase())
+  return result.length
 }
 
 function rowToMoment(r: any): Moment {

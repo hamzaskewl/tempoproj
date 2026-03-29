@@ -9,7 +9,7 @@ import { createClient, http } from 'viem'
 import { tempo as tempoChain } from 'viem/chains'
 import { connectFirehose, getTrending, getChannel, getSpikes, getStats, isConnected, getVodTimestamp, getVodUrl, isStreamLive, onSpike, getViewerCount, setActiveChannel, removeActiveChannel } from './firehose.js'
 import { summarizeChannel, classifySpike, classifySpikeDirect, summarizeChannelDirect, getLLMBudget, hasDirectAPI, restoreLLMUsage } from './summarize.js'
-import { startMomentCapture, getMoments, getMomentById, getMomentsByUser, watchChannel, unwatchChannel, getWatchedChannels, getMomentStats, getClippedMoments, initWatchedChannels, getUserChannels, addUserChannel, removeUserChannel, confirmUserChannel } from './moments.js'
+import { startMomentCapture, getMoments, getMomentById, getMomentsByUser, watchChannel, unwatchChannel, getWatchedChannels, getMomentStats, getClippedMoments, getClippedMomentsCount, initWatchedChannels, getUserChannels, addUserChannel, removeUserChannel, confirmUserChannel } from './moments.js'
 import { setTwitchAuth, getTwitchAuth, createClip, restoreTwitchAuth } from './clip.js'
 import { createUser, getUser, createSession, validateSession, destroySession, generateInviteCode, validateInviteCode, redeemInviteCode, getInviteCodes, getAllUsers, isAdmin, isDesignatedAdmin, checkRateLimit, getSessionCookie, clearSessionCookie, parseSessionToken, getAuthStats, createPendingRegistration, consumePendingRegistration, deleteUser, deleteInviteCode, addToWhitelist, removeFromWhitelist, getWhitelist, isWhitelisted, loadWhitelist } from './auth.js'
 import { initDatabase } from './db/index.js'
@@ -812,9 +812,11 @@ app.get('/moments/:id', async (req, res) => {
 app.get('/api/clips', async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit as string) || 20, 50)
   const offset = parseInt(req.query.offset as string) || 0
-  const clips = await getClippedMoments(limit, offset)
+  const channel = req.query.channel as string || undefined
+  const clips = await getClippedMoments(limit, offset, channel)
   const stats = await getMomentStats()
-  res.json({ clips, stats })
+  const filteredTotal = await getClippedMomentsCount(channel)
+  res.json({ clips, stats, filteredTotal })
 })
 
 // --- Public stats API for landing page ---

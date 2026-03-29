@@ -290,14 +290,16 @@
       currentPage = page
       const offset = (page - 1) * PER_PAGE
       try {
-        const res = await fetch(`/api/clips?limit=${PER_PAGE}&offset=${offset}`)
+        let url = `/api/clips?limit=${PER_PAGE}&offset=${offset}`
+        if (filterChannel) url += `&channel=${encodeURIComponent(filterChannel)}`
+        const res = await fetch(url)
         const data = await res.json()
 
         document.getElementById('statTotal').textContent = data.stats.total.toLocaleString()
         document.getElementById('statClipped').textContent = data.stats.clipped.toLocaleString()
         const rate = data.stats.total > 0 ? Math.round((data.stats.clipped / data.stats.total) * 100) : 0
         document.getElementById('statRate').textContent = rate + '%'
-        totalClips = data.stats.clipped
+        totalClips = data.filteredTotal
 
         const topEl = document.getElementById('topChannels')
         topEl.innerHTML = data.stats.topChannels.map(ch =>
@@ -324,7 +326,6 @@
     function renderClips() {
       const grid = document.getElementById('clipsGrid')
       let filtered = allClips
-      if (filterChannel) filtered = filtered.filter(c => c.channel === filterChannel)
       if (myClipsOnly && myChannels.length > 0) filtered = filtered.filter(c => myChannels.includes(c.channel.toLowerCase()))
 
       if (filtered.length === 0) {
