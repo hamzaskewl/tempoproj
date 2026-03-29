@@ -226,6 +226,31 @@ ${chatLog}`,
   }
 }
 
+// Build the user message for classification — spike messages first, context last
+function buildClassifyMessage(chatSnapshot: string[], context?: ClassifyContext): string {
+  // Split: last ~40% are the spike messages (the burst), rest is context before
+  const spikeCount = Math.max(5, Math.ceil(chatSnapshot.length * 0.4))
+  const contextMessages = chatSnapshot.slice(0, -spikeCount)
+  const spikeMessages = chatSnapshot.slice(-spikeCount)
+
+  let msg = `=== SPIKE MESSAGES (most important — this is what chat said DURING the moment) ===\n${spikeMessages.join('\n')}\n`
+
+  if (contextMessages.length > 0) {
+    msg += `\n=== CONTEXT (before spike — background chat, less important) ===\n${contextMessages.join('\n')}\n`
+  }
+
+  if (context) {
+    const parts = []
+    if (context.streamer) parts.push(`Streamer: ${context.streamer}`)
+    if (context.game) parts.push(`Game: ${context.game}`)
+    if (context.streamTitle) parts.push(`Title: ${context.streamTitle}`)
+    if (context.viewers) parts.push(`Viewers: ${context.viewers.toLocaleString()}`)
+    if (parts.length > 0) msg += `\n(Stream info: ${parts.join(', ')})`
+  }
+
+  return msg
+}
+
 // Quick spike classification via MPP (paid endpoint for agents)
 export async function classifySpike(chatSnapshot: string[], context?: ClassifyContext): Promise<{
   mood: string
@@ -234,16 +259,7 @@ export async function classifySpike(chatSnapshot: string[], context?: ClassifyCo
 } | null> {
   if (chatSnapshot.length === 0) return null
 
-  let userMsg = ''
-  if (context) {
-    const parts = []
-    if (context.streamer) parts.push(`Streamer: ${context.streamer}`)
-    if (context.game) parts.push(`Game: ${context.game}`)
-    if (context.streamTitle) parts.push(`Stream title: ${context.streamTitle}`)
-    if (context.viewers) parts.push(`Viewers: ${context.viewers.toLocaleString()}`)
-    if (parts.length > 0) userMsg += parts.join(' | ') + '\n\n'
-  }
-  userMsg += `Chat spike (${chatSnapshot.length} messages):\n${chatSnapshot.join('\n')}`
+  const userMsg = buildClassifyMessage(chatSnapshot, context)
 
   const body = {
     model: 'claude-haiku-4-5-20251001',
@@ -295,6 +311,8 @@ You know how Twitch chat behaves — spam patterns mean excitement, copypasta me
 
 When classifying, focus on what the STREAMER did or what happened ON STREAM, not just what chat is doing. Chat is your signal, but the description should be about the moment itself.
 
+IMPORTANT: The chat messages are split into two sections. The "SPIKE MESSAGES" section contains what chat said DURING the spike — these are the most important messages and your primary signal for what just happened. The "CONTEXT (before spike)" section is older background chat. Focus heavily on the spike messages. Stream title and game are provided for minor context only — do NOT let them dominate your classification. Let the chat tell you what happened.
+
 Rules:
 - mood must be one of: hype, funny, rage, clutch, awkward, wholesome, drama, shock, sad
 - description: ONE punchy sentence about what happened (not what chat did). Write it like a clip title a viewer would click.
@@ -317,16 +335,7 @@ export async function classifySpikeDirect(chatSnapshot: string[], context?: Clas
 } | null> {
   if (chatSnapshot.length === 0) return null
 
-  let userMsg = ''
-  if (context) {
-    const parts = []
-    if (context.streamer) parts.push(`Streamer: ${context.streamer}`)
-    if (context.game) parts.push(`Game: ${context.game}`)
-    if (context.streamTitle) parts.push(`Stream title: ${context.streamTitle}`)
-    if (context.viewers) parts.push(`Viewers: ${context.viewers.toLocaleString()}`)
-    if (parts.length > 0) userMsg += parts.join(' | ') + '\n\n'
-  }
-  userMsg += `Chat spike (${chatSnapshot.length} messages):\n${chatSnapshot.join('\n')}`
+  const userMsg = buildClassifyMessage(chatSnapshot, context)
 
   try {
     const response = await anthropicFetch({
