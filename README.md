@@ -28,7 +28,7 @@ Chat Firehose → Spike Detection → AI Classification → Auto-Clip
 Every second, per channel:
   burst     = messages in last 5s      ← instant reaction
   sustained = messages in last 30s     ← confirms it's real
-  baseline  = avg of non-zero bursts   ← adapts to channel size
+  baseline  = avg of non-zero bursts   ← adapts to channel size (30 sample window)
 
 Spike fires when:
   burst > baseline × adaptive_threshold   (1.5x to 2.5x depending on channel size)
@@ -36,6 +36,8 @@ Spike fires when:
   viewers ≥ 500
   30s debounce                            (no spam)
 ```
+
+Chat also gets a fast regex-based **vibe score** (funny, hype, awkward, win, loss) from emote/keyword patterns — this is the instant label before the LLM responds.
 
 ### How AI classification works
 
@@ -56,11 +58,14 @@ The LLM returns:
 - **Auto-clipping** — creates Twitch clips on your account when moments are detected
 - **Per-user dashboard** — 3 channel slots, persistent moments, clip embeds, streamer filtering
 - **Invite system** — multi-use codes with configurable limits, auto-apply from URL
+- **Admin whitelist** — whitelist Twitch usernames for invite-free access
+- **User management** — admin can revoke users, delete invite codes
 - **VOD deep-links** — direct links to exact VOD timestamps
 - **Trending sidebar** — top channels by burst rate across all of Twitch
 - **MPP API** — pay-per-use endpoints for programmatic access via Tempo micropayments
 - **Postgres persistence** — moments, clips, user channels, LLM budget all survive restarts
 - **Twitch token auto-refresh** — OAuth tokens persist in DB, refresh automatically on startup + every 3 hours
+- **Rate limiting** — auth endpoints rate-limited to prevent abuse
 
 ---
 
@@ -92,8 +97,6 @@ ADMIN_TWITCH=             # Twitch username that gets admin role automatically
 LLM_BUDGET_USD=20         # Max LLM spend before auto-pause (default $20)
 PORT=3000                 # Server port
 WALLET_ADDRESS=           # Tempo wallet for MPP payments
-TEMPO_SESSION_KEY=        # MPP session key
-TEMPO_RPC=                # Tempo RPC endpoint
 ```
 
 ---
@@ -107,18 +110,20 @@ src/
   moments.ts        Moment capture, per-user channel management (3 slots), DB persistence
   clip.ts           Twitch clip creation, OAuth token persistence + auto-refresh
   summarize.ts      Claude Haiku classification, system prompt, budget tracking
-  auth.ts           User auth, sessions, multi-use invite codes, TOS
+  auth.ts           User auth, sessions, invite codes, whitelist, TOS
   db/
-    schema.ts       Drizzle ORM schema (users, moments, channels, tokens, invites, etc.)
+    schema.ts       Drizzle ORM schema (users, moments, channels, tokens, invites, whitelist)
     index.ts        Database init, auto-migration on startup
 
 public/
   index.html        Landing page — public stats, live spike feed, trending
   dashboard.html    Per-user dashboard — channel slots, moments, clip embeds
-  clips.html        Clip directory with "my channels" filter
-  admin.html        Admin panel — invite codes, users, LLM budget
+  clips.html        Clip directory with pagination + "my channels" filter
+  admin.html        Admin panel — invite codes, users, whitelist, LLM budget
   login.html        Twitch OAuth login with TOS consent
   invite.html       Invite code entry (supports auto-fill from URL)
+  docs.html         API documentation
+  llms.txt          LLM-readable service manifest
 ```
 
 ---
@@ -129,6 +134,7 @@ public/
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| `GET` | `/api` | Service info + endpoint discovery |
 | `GET` | `/health` | Status + stats |
 | `GET` | `/trending` | Top 10 trending channels |
 | `GET` | `/alerts` | SSE spike stream (filterable by `?channel=name`) |
@@ -136,6 +142,7 @@ public/
 | `GET` | `/moments/latest/:channel` | Latest moment for a channel |
 | `GET` | `/api/stats` | Public stats for landing page |
 | `GET` | `/api/clips` | Clip directory |
+| `GET` | `/clip/:id` | Embedded clip player page |
 
 ### Authenticated endpoints
 
@@ -147,6 +154,7 @@ public/
 | `POST` | `/my/channels/:channel/confirm` | Confirm (must be live) |
 | `GET` | `/my/moments` | All moments for your channels |
 | `GET` | `/channel-stats/:name` | Live channel rates |
+| `POST` | `/clip/:id` | Create a Twitch clip for a moment |
 
 ### Paid endpoints (Tempo MPP, USDC)
 
