@@ -404,19 +404,12 @@ export function startMomentCapture() {
       }
     } catch {}
 
-    // Save to DB — primary user
+    // Save to DB — single row per spike (no per-user copies)
     try {
       const dbId = await saveMoment(moment)
       moment.id = dbId
     } catch (err: any) {
       console.error(`[moments] DB save failed:`, err.message)
-    }
-
-    // Save copies for additional users watching the same channel
-    for (const uid of ownerUsers.slice(1)) {
-      try {
-        await saveMoment({ ...moment, userId: uid, id: nextMemId++ })
-      } catch {}
     }
 
     // Keep max 500 in memory cache
@@ -426,15 +419,18 @@ export function startMomentCapture() {
 
 export async function getMomentsByUser(userId: string, limit: number = 50): Promise<Moment[]> {
   if (db) {
-    // Deduplicate by channel+spikeAt in case multiple rows exist for same spike
+    // Show moments for channels the user is watching (confirmed), deduplicated
     const rows = await db.select().from(momentsTable)
-      .where(sql`user_id = ${userId} AND id IN (SELECT MIN(id) FROM moments WHERE user_id = ${userId} GROUP BY channel, spike_at)`)
+      .where(sql`channel IN (SELECT channel FROM user_channels WHERE user_id = ${userId} AND confirmed = true) AND id IN (SELECT MIN(id) FROM moments GROUP BY channel, spike_at)`)
       .orderBy(desc(momentsTable.id))
       .limit(limit)
     return rows.map(rowToMoment)
   }
+  // In-memory fallback: match by user's channels
+  const userChs = memUserChannels.get(userId) || []
+  const confirmedChs = new Set(userChs.filter(c => c.confirmed).map(c => c.channel))
   return memMoments
-    .filter(m => m.userId === userId)
+    .filter(m => confirmedChs.has(m.channel.toLowerCase()))
     .reverse()
     .slice(0, limit)
 }
