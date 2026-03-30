@@ -79,8 +79,8 @@ function scoreMessage(text: string): VibeScores {
 
 export interface ChannelState {
   name: string
-  // Rolling window: timestamps of messages in last 2 min
-  messageTimes: number[]
+  // Rolling window: timestamps + usernames of messages in last 2 min
+  messageTimes: { time: number, user: string }[]
   // Last 200 messages
   recentMessages: ChatMessage[]
   // Spike detection — dual window
@@ -161,7 +161,7 @@ function processMessage(msg: ChatMessage) {
       }
       channels.set(msg.channel, state)
     }
-    state.messageTimes.push(Date.now())
+    state.messageTimes.push({ time: Date.now(), user: msg.displayName.toLowerCase() })
     // Keep timestamps lean — only last 30s
     if (state.messageTimes.length > 300) {
       state.messageTimes = state.messageTimes.slice(-100)
@@ -173,7 +173,7 @@ function processMessage(msg: ChatMessage) {
   const state = getOrCreateChannel(msg.channel)
   const now = Date.now()
 
-  state.messageTimes.push(now)
+  state.messageTimes.push({ time: now, user: msg.displayName.toLowerCase() })
   state.recentMessages.push(msg)
 
   const scores = scoreMessage(msg.text)
@@ -199,7 +199,7 @@ setInterval(() => {
 
     // Clean up dead non-active channels aggressively
     if (!isActive) {
-      state.messageTimes = state.messageTimes.filter(t => t > cutoff)
+      state.messageTimes = state.messageTimes.filter(m => m.time > cutoff)
       if (state.messageTimes.length === 0) {
         channels.delete(name)
       }
@@ -207,17 +207,17 @@ setInterval(() => {
     }
 
     // Active channels: full processing
-    state.messageTimes = state.messageTimes.filter(t => t > cutoff)
+    state.messageTimes = state.messageTimes.filter(m => m.time > cutoff)
 
-    // 5s burst rate — instant reaction
+    // 5s burst rate — unique chatters in last 5s (not raw messages)
     const cutoff5s = now - 5_000
-    const msgs5s = state.messageTimes.filter(t => t > cutoff5s).length
-    state.burst = msgs5s / 5
+    const users5s = new Set(state.messageTimes.filter(m => m.time > cutoff5s).map(m => m.user))
+    state.burst = users5s.size / 5
 
-    // 30s sustained rate — confirms real moment
+    // 30s sustained rate — unique chatters in last 30s
     const cutoff30s = now - 30_000
-    const msgs30s = state.messageTimes.filter(t => t > cutoff30s).length
-    state.sustained = msgs30s / 30
+    const users30s = new Set(state.messageTimes.filter(m => m.time > cutoff30s).map(m => m.user))
+    state.sustained = users30s.size / 30
 
     state.sampleCount++
 
