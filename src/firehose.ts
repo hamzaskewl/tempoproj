@@ -68,6 +68,10 @@ function getOrCreateChannel(name: string): ChannelState {
 }
 
 function processMessage(msg: ChatMessage) {
+  // Ensure displayName exists for unique chatter tracking
+  const userName = (msg.displayName || msg.channel || 'anon').toLowerCase()
+  msg.displayName = msg.displayName || userName
+
   // Tokenize once — used for gift sub detection + vibe scoring
   const { scores, giftSub } = analyzeMessage(msg.text)
 
@@ -96,7 +100,7 @@ function processMessage(msg: ChatMessage) {
       }
       channels.set(msg.channel, state)
     }
-    state.messageTimes.push({ time: Date.now(), user: msg.displayName.toLowerCase() })
+    state.messageTimes.push({ time: Date.now(), user: userName })
     // Keep timestamps lean — only last 30s
     if (state.messageTimes.length > 300) {
       state.messageTimes = state.messageTimes.slice(-100)
@@ -108,7 +112,7 @@ function processMessage(msg: ChatMessage) {
   const state = getOrCreateChannel(msg.channel)
   const now = Date.now()
 
-  state.messageTimes.push({ time: now, user: msg.displayName.toLowerCase() })
+  state.messageTimes.push({ time: now, user: userName })
   state.recentMessages.push(msg)
 
   const hasVibe = scores.funny + scores.hype + scores.awkward + scores.win + scores.loss > 0
@@ -143,15 +147,30 @@ setInterval(() => {
     // Active channels: full processing
     state.messageTimes = state.messageTimes.filter(m => m.time > cutoff)
 
-    // 5s burst rate — unique chatters in last 5s (not raw messages)
+    // 5s burst rate — count messages but cap each user at 2 per window
+    // This way: 1 spammer = max 0.4, but 10 real chatters = 4.0
     const cutoff5s = now - 5_000
-    const users5s = new Set(state.messageTimes.filter(m => m.time > cutoff5s).map(m => m.user))
-    state.burst = users5s.size / 5
+    const msgs5s = state.messageTimes.filter(m => m.time > cutoff5s)
+    const userCounts5s = new Map<string, number>()
+    let capped5s = 0
+    for (const m of msgs5s) {
+      const count = (userCounts5s.get(m.user) || 0) + 1
+      userCounts5s.set(m.user, count)
+      if (count <= 2) capped5s++ // cap each user at 2 messages per 5s window
+    }
+    state.burst = capped5s / 5
 
-    // 30s sustained rate — unique chatters in last 30s
+    // 30s sustained rate — same capping logic, 3 msgs max per user
     const cutoff30s = now - 30_000
-    const users30s = new Set(state.messageTimes.filter(m => m.time > cutoff30s).map(m => m.user))
-    state.sustained = users30s.size / 30
+    const msgs30s = state.messageTimes.filter(m => m.time > cutoff30s)
+    const userCounts30s = new Map<string, number>()
+    let capped30s = 0
+    for (const m of msgs30s) {
+      const count = (userCounts30s.get(m.user) || 0) + 1
+      userCounts30s.set(m.user, count)
+      if (count <= 3) capped30s++ // cap each user at 3 messages per 30s window
+    }
+    state.sustained = capped30s / 30
 
     state.sampleCount++
 
