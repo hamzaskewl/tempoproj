@@ -67,10 +67,43 @@ function getOrCreateChannel(name: string): ChannelState {
   return state
 }
 
+// Per-user rate limiting — drop spam before it hits the tokenizer
+const userMsgTimes = new Map<string, number[]>()
+const USER_RATE_LIMIT = 5 // max msgs per 5 seconds per user per channel
+const USER_RATE_WINDOW = 5_000
+
+function isUserSpamming(channelUser: string): boolean {
+  const now = Date.now()
+  const times = userMsgTimes.get(channelUser)
+  if (!times) {
+    userMsgTimes.set(channelUser, [now])
+    return false
+  }
+  // Clean old entries
+  const recent = times.filter(t => t > now - USER_RATE_WINDOW)
+  recent.push(now)
+  userMsgTimes.set(channelUser, recent)
+  return recent.length > USER_RATE_LIMIT
+}
+
+// Clean up rate limit map every 30s to prevent memory leak
+setInterval(() => {
+  const cutoff = Date.now() - USER_RATE_WINDOW
+  for (const [key, times] of userMsgTimes) {
+    const recent = times.filter(t => t > cutoff)
+    if (recent.length === 0) userMsgTimes.delete(key)
+    else userMsgTimes.set(key, recent)
+  }
+}, 30_000)
+
 function processMessage(msg: ChatMessage) {
   // Ensure displayName exists for unique chatter tracking
   const userName = (msg.displayName || msg.channel || 'anon').toLowerCase()
   msg.displayName = msg.displayName || userName
+
+  // Drop spam before tokenizing — per-user rate limit
+  const channelUser = `${msg.channel}:${userName}`
+  if (isUserSpamming(channelUser)) return
 
   // Tokenize once — used for gift sub detection + vibe scoring
   const { scores, giftSub } = analyzeMessage(msg.text)
@@ -101,9 +134,9 @@ function processMessage(msg: ChatMessage) {
       channels.set(msg.channel, state)
     }
     state.messageTimes.push({ time: Date.now(), user: userName })
-    // Keep timestamps lean — only last 30s
-    if (state.messageTimes.length > 300) {
-      state.messageTimes = state.messageTimes.slice(-100)
+    // Keep timestamps lean
+    if (state.messageTimes.length > 500) {
+      state.messageTimes = state.messageTimes.slice(-200)
     }
     return
   }
