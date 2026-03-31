@@ -11,9 +11,11 @@ import { connectFirehose, getTrending, getChannel, getSpikes, getStats, isConnec
 import { summarizeChannel, classifySpike, classifySpikeDirect, summarizeChannelDirect, getLLMBudget, hasDirectAPI, restoreLLMUsage } from './summarize.js'
 import { startMomentCapture, getMoments, getMomentById, getMomentsByUser, watchChannel, unwatchChannel, getWatchedChannels, getMomentStats, getClippedMoments, getClippedMomentsCount, initWatchedChannels, getUserChannels, addUserChannel, removeUserChannel, confirmUserChannel } from './moments.js'
 import { loadGlobalEmotes } from './tokenizer.js'
-import { setTwitchAuth, getTwitchAuth, createClip, restoreTwitchAuth } from './clip.js'
+import { setTwitchAuth, getTwitchAuth, createClip, restoreTwitchAuth, revokeTwitchAuth } from './clip.js'
 import { createUser, getUser, createSession, validateSession, destroySession, generateInviteCode, validateInviteCode, redeemInviteCode, getInviteCodes, getAllUsers, isAdmin, isDesignatedAdmin, checkRateLimit, getSessionCookie, clearSessionCookie, parseSessionToken, getAuthStats, createPendingRegistration, consumePendingRegistration, deleteUser, deleteInviteCode, addToWhitelist, removeFromWhitelist, getWhitelist, isWhitelisted, loadWhitelist } from './auth.js'
-import { initDatabase } from './db/index.js'
+import { initDatabase, db } from './db/index.js'
+import { userChannels as userChannelsTable, moments as momentsTable, twitchTokens as twitchTokensTable } from './db/schema.js'
+import { eq, sql, and, desc } from 'drizzle-orm'
 import crypto from 'crypto'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -319,6 +321,62 @@ app.post('/admin/whitelist', requireAdmin, async (req, res) => {
 app.delete('/admin/whitelist/:username', requireAdmin, async (req, res) => {
   await removeFromWhitelist(req.params.username.toLowerCase())
   res.json({ ok: true, whitelist: await getWhitelist() })
+})
+
+// --- Admin: detailed users with channels, clips, token status ---
+app.get('/admin/users/detailed', requireAdmin, async (_req, res) => {
+  if (!db) return res.json({ users: [] })
+  try {
+    const users = await getAllUsers()
+    const allChannels = await db.select().from(userChannelsTable)
+    const clipCounts = await db.select({
+      userId: momentsTable.userId,
+      total: sql<number>`count(*)`,
+      clipped: sql<number>`count(clip_url)`,
+    }).from(momentsTable).where(sql`user_id IS NOT NULL`).groupBy(momentsTable.userId)
+    const tokens = await db.select({ userId: twitchTokensTable.userId, updatedAt: twitchTokensTable.updatedAt }).from(twitchTokensTable)
+    const tokenMap = new Map(tokens.map(t => [t.userId, t.updatedAt]))
+    const clipMap = new Map(clipCounts.map(c => [c.userId, { total: Number(c.total), clipped: Number(c.clipped) }]))
+
+    const detailed = users.map(u => {
+      const channels = allChannels.filter(c => c.userId === u.id).map(c => ({
+        channel: c.channel, confirmed: c.confirmed, addedAt: c.addedAt.getTime(),
+        confirmedAt: c.confirmedAt?.getTime() || null,
+      }))
+      const clips = clipMap.get(u.id) || { total: 0, clipped: 0 }
+      return {
+        ...u,
+        channels,
+        momentsTotal: clips.total,
+        clipsCreated: clips.clipped,
+        hasOAuth: tokenMap.has(u.id),
+        oauthUpdatedAt: tokenMap.get(u.id)?.getTime() || null,
+      }
+    })
+    res.json({ users: detailed })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// --- Admin: revoke a user's OAuth token ---
+app.delete('/admin/users/:id/token', requireAdmin, async (req, res) => {
+  try {
+    await revokeTwitchAuth(req.params.id)
+    res.json({ ok: true })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// --- User: disconnect own OAuth ---
+app.delete('/my/token', requireAuth, async (req, res) => {
+  try {
+    await revokeTwitchAuth((req as any).user.id)
+    res.json({ ok: true })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 // --- Health / Status (free, public) ---

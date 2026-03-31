@@ -217,7 +217,14 @@
       <div class="stat-item"><div class="val" id="statRate">-</div><div class="lbl">clip rate</div></div>
     </div>
 
-    <div class="section-title">top channels</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="section-title" style="margin-bottom:0">top channels</div>
+      <div style="position:relative">
+        <input type="text" id="channelSearch" placeholder="search channel..." oninput="handleChannelSearch()" onkeydown="if(event.key==='Enter'){applySearch()}" style="background:#111;border:1px solid #1a1a1a;border-radius:6px;padding:8px 14px 8px 30px;color:#fff;font-family:inherit;font-size:12px;outline:none;width:220px">
+        <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);opacity:0.3" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <div id="searchResults" style="display:none;position:absolute;top:100%;left:0;right:0;background:#111;border:1px solid #222;border-radius:6px;margin-top:4px;max-height:200px;overflow-y:auto;z-index:50"></div>
+      </div>
+    </div>
     <div class="top-channels" id="topChannels"></div>
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
@@ -302,6 +309,7 @@
         document.getElementById('statRate').textContent = rate + '%'
         totalClips = data.filteredTotal
 
+        allTopChannels = data.stats.topChannels
         const topEl = document.getElementById('topChannels')
         topEl.innerHTML = data.stats.topChannels.map(ch =>
           `<div class="top-ch ${filterChannel === ch.channel ? 'active' : ''}" onclick="toggleFilter('${ch.channel}')">
@@ -401,8 +409,56 @@
 
     function toggleFilter(channel) {
       filterChannel = filterChannel === channel ? null : channel
+      document.getElementById('channelSearch').value = filterChannel || ''
       loadPage(1)
     }
+
+    // --- Channel search ---
+    let allTopChannels = []
+
+    function handleChannelSearch() {
+      const q = document.getElementById('channelSearch').value.trim().toLowerCase()
+      const dropdown = document.getElementById('searchResults')
+      if (!q) { dropdown.style.display = 'none'; return }
+
+      const matches = allTopChannels.filter(ch => ch.channel.toLowerCase().includes(q))
+      if (matches.length === 0) {
+        // Allow searching for any channel even if not in top list
+        dropdown.innerHTML = `<div style="padding:8px 12px;font-size:11px;color:#666;cursor:pointer" onclick="searchChannel('${esc(q)}')">${esc(q)} <span style="color:#444">— search</span></div>`
+      } else {
+        dropdown.innerHTML = matches.slice(0, 10).map(ch =>
+          `<div style="padding:8px 12px;font-size:11px;color:#ccc;cursor:pointer;display:flex;justify-content:space-between" onmouseover="this.style.background='#1a1a1a'" onmouseout="this.style.background='none'" onclick="searchChannel('${esc(ch.channel)}')">
+            <span>${esc(ch.channel)}</span><span style="color:#444">${ch.count} clips</span>
+          </div>`
+        ).join('')
+      }
+      dropdown.style.display = 'block'
+    }
+
+    function searchChannel(channel) {
+      document.getElementById('channelSearch').value = channel
+      document.getElementById('searchResults').style.display = 'none'
+      filterChannel = channel.toLowerCase()
+      loadPage(1)
+    }
+
+    function applySearch() {
+      const q = document.getElementById('channelSearch').value.trim()
+      document.getElementById('searchResults').style.display = 'none'
+      if (q) {
+        filterChannel = q.toLowerCase()
+      } else {
+        filterChannel = null
+      }
+      loadPage(1)
+    }
+
+    // Close search dropdown on outside click
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#channelSearch') && !e.target.closest('#searchResults')) {
+        document.getElementById('searchResults').style.display = 'none'
+      }
+    })
 
     function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML }
 

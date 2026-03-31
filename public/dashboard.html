@@ -379,6 +379,19 @@
           <div class="empty" style="padding:16px 0">loading...</div>
         </div>
       </div>
+
+      <div class="sidebar-section">
+        <div class="section-title">account</div>
+        <div style="background:#111;border:1px solid #161616;border-radius:6px;padding:14px">
+          <div style="font-size:11px;color:#555;margin-bottom:10px">
+            Clips are created using your Twitch OAuth. You can disconnect to stop all clip creation from your account.
+          </div>
+          <button id="disconnectOAuthBtn" onclick="disconnectOAuth()" style="background:none;border:1px solid #ef444444;color:#ef4444;font-family:inherit;font-size:10px;padding:6px 14px;border-radius:4px;cursor:pointer;width:100%">disconnect Twitch OAuth</button>
+          <div style="font-size:10px;color:#333;margin-top:8px;text-align:center">
+            You can also revoke access at <a href="https://www.twitch.tv/settings/connections" target="_blank" style="color:#9146ff;text-decoration:none">twitch.tv/settings/connections</a>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -802,6 +815,20 @@
     async function logout() {
       await fetch('/auth/logout', { method: 'POST' })
       window.location.href = '/login.html'
+    }
+
+    async function disconnectOAuth() {
+      if (!confirm('Disconnect your Twitch OAuth? This will stop all clip creation from your account. You\'ll need to re-login to reconnect.')) return
+      try {
+        const res = await fetch('/my/token', { method: 'DELETE' })
+        if (res.ok) {
+          const btn = document.getElementById('disconnectOAuthBtn')
+          btn.textContent = 'disconnected'
+          btn.disabled = true
+          btn.style.color = '#333'
+          btn.style.borderColor = '#222'
+        }
+      } catch {}
     }
   </script>
 </body>

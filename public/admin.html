@@ -236,6 +236,51 @@
 
     .empty-row td { color: #222; text-align: center; padding: 24px; }
 
+    /* Detailed user cards */
+    .user-detail-card {
+      background: #0e0e0e; border: 1px solid #1a1a1a; border-radius: 8px;
+      padding: 16px 20px;
+    }
+    .user-detail-card:hover { border-color: #222; }
+    .udc-top {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px;
+    }
+    .udc-name { font-size: 14px; font-weight: 600; color: #fff; }
+    .udc-id { font-size: 10px; color: #333; font-family: inherit; margin-left: 8px; }
+    .udc-stats {
+      display: flex; gap: 16px; margin-bottom: 10px;
+    }
+    .udc-stat { font-size: 11px; color: #555; }
+    .udc-stat b { color: #fff; font-size: 13px; }
+    .udc-stat.clips b { color: #22c55e; }
+    .udc-channels {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
+    }
+    .udc-ch {
+      font-size: 10px; padding: 3px 8px; border-radius: 4px;
+      border: 1px solid #222; color: #666;
+    }
+    .udc-ch.confirmed { border-color: #22c55e44; color: #22c55e; }
+    .udc-ch.pending { border-color: #f59e0b44; color: #f59e0b; }
+    .udc-actions {
+      display: flex; gap: 6px; margin-top: 10px; padding-top: 10px;
+      border-top: 1px solid #1a1a1a;
+    }
+    .udc-btn {
+      background: none; border: 1px solid #222; color: #555; font-family: inherit;
+      font-size: 10px; padding: 4px 10px; border-radius: 4px; cursor: pointer;
+    }
+    .udc-btn:hover { border-color: #444; color: #999; }
+    .udc-btn.danger { color: #ef4444; border-color: #ef444444; }
+    .udc-btn.danger:hover { background: #1a0a0a; }
+    .udc-oauth {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 10px; padding: 2px 8px; border-radius: 3px;
+    }
+    .udc-oauth.connected { background: #0a1a0a; color: #22c55e; }
+    .udc-oauth.disconnected { background: #1a1a1a; color: #444; }
+
     @media (max-width: 768px) {
       .topbar { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
       .topbar-left { gap: 12px; }
@@ -330,7 +375,7 @@
         </div>
       </div>
 
-      <!-- Users -->
+      <!-- Users (basic) -->
       <div class="card">
         <div class="card-header">
           <div class="card-title">users</div>
@@ -341,6 +386,35 @@
             <tbody id="userTable"><tr class="empty-row"><td colspan="5">loading...</td></tr></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- Detailed Users Panel -->
+    <div class="card" style="margin-top:16px">
+      <div class="card-header">
+        <div class="card-title">user details</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="text" id="userSearch" placeholder="search users..." oninput="filterUsers()" style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:4px;padding:6px 12px;color:#fff;font-family:inherit;font-size:11px;outline:none;width:180px">
+          <select id="userSort" onchange="filterUsers()" style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:4px;padding:6px 10px;color:#888;font-family:inherit;font-size:11px;outline:none;cursor:pointer">
+            <option value="clips-desc">most clips</option>
+            <option value="clips-asc">least clips</option>
+            <option value="moments-desc">most moments</option>
+            <option value="last-seen">last seen</option>
+            <option value="joined">newest</option>
+            <option value="channels-desc">most channels</option>
+          </select>
+          <select id="userFilter" onchange="filterUsers()" style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:4px;padding:6px 10px;color:#888;font-family:inherit;font-size:11px;outline:none;cursor:pointer">
+            <option value="all">all users</option>
+            <option value="has-oauth">has OAuth</option>
+            <option value="no-oauth">no OAuth</option>
+            <option value="has-clips">has clips</option>
+            <option value="no-clips">no clips</option>
+            <option value="has-channels">has channels</option>
+          </select>
+        </div>
+      </div>
+      <div id="detailedUsers" style="display:flex;flex-direction:column;gap:8px;max-height:600px;overflow-y:auto;padding:4px 0">
+        <div style="color:#333;text-align:center;padding:24px">loading...</div>
       </div>
     </div>
 
@@ -376,7 +450,7 @@
     }).catch(() => window.location.href = '/login.html')
 
     async function loadAll() {
-      await Promise.all([loadStats(), loadInvites(), loadUsers(), loadWhitelist()])
+      await Promise.all([loadStats(), loadInvites(), loadUsers(), loadWhitelist(), loadDetailedUsers()])
     }
 
     async function loadStats() {
@@ -564,6 +638,102 @@
       try {
         await fetch(`/admin/whitelist/${username}`, { method: 'DELETE' })
         await loadWhitelist()
+      } catch {}
+    }
+
+    // --- Detailed Users ---
+    let detailedUsersData = []
+
+    async function loadDetailedUsers() {
+      try {
+        const d = await fetch('/admin/users/detailed').then(r => r.json())
+        detailedUsersData = d.users || []
+        filterUsers()
+      } catch {}
+    }
+
+    function filterUsers() {
+      const search = (document.getElementById('userSearch').value || '').toLowerCase()
+      const sort = document.getElementById('userSort').value
+      const filter = document.getElementById('userFilter').value
+
+      let users = [...detailedUsersData]
+
+      // Filter
+      if (search) {
+        users = users.filter(u =>
+          u.username.toLowerCase().includes(search) ||
+          u.id.includes(search) ||
+          u.channels.some(c => c.channel.toLowerCase().includes(search))
+        )
+      }
+      if (filter === 'has-oauth') users = users.filter(u => u.hasOAuth)
+      else if (filter === 'no-oauth') users = users.filter(u => !u.hasOAuth)
+      else if (filter === 'has-clips') users = users.filter(u => u.clipsCreated > 0)
+      else if (filter === 'no-clips') users = users.filter(u => u.clipsCreated === 0)
+      else if (filter === 'has-channels') users = users.filter(u => u.channels.length > 0)
+
+      // Sort
+      if (sort === 'clips-desc') users.sort((a, b) => b.clipsCreated - a.clipsCreated)
+      else if (sort === 'clips-asc') users.sort((a, b) => a.clipsCreated - b.clipsCreated)
+      else if (sort === 'moments-desc') users.sort((a, b) => b.momentsTotal - a.momentsTotal)
+      else if (sort === 'last-seen') users.sort((a, b) => b.lastSeen - a.lastSeen)
+      else if (sort === 'joined') users.sort((a, b) => b.createdAt - a.createdAt)
+      else if (sort === 'channels-desc') users.sort((a, b) => b.channels.length - a.channels.length)
+
+      renderDetailedUsers(users)
+    }
+
+    function renderDetailedUsers(users) {
+      const el = document.getElementById('detailedUsers')
+      if (!users.length) {
+        el.innerHTML = '<div style="color:#333;text-align:center;padding:24px">no users match</div>'
+        return
+      }
+      el.innerHTML = users.map(u => {
+        const confirmedCh = u.channels.filter(c => c.confirmed)
+        const pendingCh = u.channels.filter(c => !c.confirmed)
+        const channelHtml = u.channels.length > 0
+          ? u.channels.map(c =>
+              `<span class="udc-ch ${c.confirmed ? 'confirmed' : 'pending'}">${esc(c.channel)} ${c.confirmed ? '✓' : '⏳'}</span>`
+            ).join('')
+          : '<span style="font-size:10px;color:#333">no channels</span>'
+
+        return `
+          <div class="user-detail-card">
+            <div class="udc-top">
+              <div>
+                <span class="udc-name">${esc(u.username)}</span>
+                <span class="udc-id">${u.id}</span>
+                <span class="badge ${u.role}" style="margin-left:8px">${u.role}</span>
+                <span class="udc-oauth ${u.hasOAuth ? 'connected' : 'disconnected'}" style="margin-left:8px">
+                  ${u.hasOAuth ? '● OAuth connected' : '○ no OAuth'}
+                </span>
+              </div>
+              <div style="font-size:10px;color:#333">
+                seen ${timeAgo(u.lastSeen)} · joined ${new Date(u.createdAt).toLocaleDateString()}
+              </div>
+            </div>
+            <div class="udc-stats">
+              <div class="udc-stat clips"><b>${u.clipsCreated}</b> clips</div>
+              <div class="udc-stat"><b>${u.momentsTotal}</b> moments</div>
+              <div class="udc-stat"><b>${confirmedCh.length}</b>/<b>${u.channels.length}</b> channels confirmed</div>
+            </div>
+            <div class="udc-channels">${channelHtml}</div>
+            <div class="udc-actions">
+              ${u.hasOAuth ? `<button class="udc-btn danger" onclick="revokeToken('${u.id}','${esc(u.username)}')">revoke OAuth</button>` : ''}
+              ${u.role !== 'admin' ? `<button class="udc-btn danger" onclick="revokeUser('${u.id}','${esc(u.username)}')">revoke access</button>` : ''}
+            </div>
+          </div>
+        `
+      }).join('')
+    }
+
+    async function revokeToken(userId, username) {
+      if (!confirm(`Revoke OAuth token for ${username}? They will need to re-login to create clips.`)) return
+      try {
+        await fetch(`/admin/users/${userId}/token`, { method: 'DELETE' })
+        await loadDetailedUsers()
       } catch {}
     }
 

@@ -369,7 +369,7 @@ export function startMomentCapture() {
 
           // Only create clips for moments the LLM deems clip-worthy
           if (result.clipWorthy && hasTwitchAuth()) {
-            const clip = await createClip(spike.channel)
+            const clip = await createClip(spike.channel, primaryUserId || undefined)
             if (clip) {
               moment.clipUrl = clip.clipUrl
               moment.clipId = clip.clipId
