@@ -58,6 +58,10 @@ function InviteInner() {
           you&apos;re almost in — enter your invite code
         </div>
 
+        <Link href="/login" className="inline-flex items-center gap-2 text-[13px] text-[#555] hover:text-white mb-6">
+          <span>&larr;</span> back to login
+        </Link>
+
         {pendingName && (
           <div className="flex items-center gap-[12px] px-4 py-3 bg-[#111] border border-[#1a1a1a] rounded-md mb-6 text-[14px]">
             {pendingAvatar && (

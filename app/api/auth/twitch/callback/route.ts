@@ -26,8 +26,8 @@ export async function GET(request: Request) {
 
   const proto = request.headers.get('x-forwarded-proto') || url.protocol.replace(':', '')
   const host = request.headers.get('host') || url.host
-  const fallback = `${proto}://${host}`
-  const redirect = `${BASE_URL || fallback}/api/auth/twitch/callback`
+  const origin = `${proto}://${host}`
+  const redirect = `${origin}/api/auth/twitch/callback`
   const secure = isSecure(request)
 
   try {
