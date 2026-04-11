@@ -24,7 +24,7 @@ export function Topbar({ status, showLogout = false }: TopbarProps) {
     return (
       <Link
         href={href}
-        className={`text-[12px] ml-4 py-1 border-b-2 transition-colors ${
+        className={`text-[14px] ml-4 py-1 border-b-2 transition-colors ${
           active
             ? 'text-[#e0e0e0] border-[#9146ff]'
             : 'text-[#444] border-transparent hover:text-[#999]'
@@ -37,15 +37,15 @@ export function Topbar({ status, showLogout = false }: TopbarProps) {
 
   async function logout() {
     try {
-      await fetch('/auth/logout', { method: 'POST', credentials: 'include' })
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
     } catch {}
     router.push('/login')
   }
 
   return (
-    <div className="flex items-center justify-between px-4 md:px-8 py-[14px] border-b border-[#141414] bg-[#0d0d0d] sticky top-0 z-[100]">
+    <div className="flex items-center justify-between px-4 md:px-8 py-[18px] border-b border-[#141414] bg-[#0d0d0d] sticky top-0 z-[100]">
       <div className="flex items-center gap-3 md:gap-6">
-        <Link href="/" className="text-[15px] font-semibold tracking-wide flex items-center gap-[6px]">
+        <Link href="/" className="text-[17px] font-semibold tracking-wide flex items-center gap-[8px]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logoclip.png" alt="" width={30} height={30} />
           clippy
@@ -63,13 +63,13 @@ export function Topbar({ status, showLogout = false }: TopbarProps) {
         {!showLogout && !authenticated && (
           <Link
             href="/login"
-            className="bg-[#9146ff] hover:bg-[#7c3aed] text-white text-[11px] font-semibold px-4 py-[6px] rounded-md"
+            className="bg-[#9146ff] hover:bg-[#7c3aed] text-white text-[13px] font-semibold px-4 py-[8px] rounded-md"
           >
             login
           </Link>
         )}
         {!showLogout && authenticated && user && (
-          <Link href="/dashboard" className="flex items-center gap-2 text-[12px] text-[#666] hover:text-white">
+          <Link href="/dashboard" className="flex items-center gap-2 text-[14px] text-[#666] hover:text-white">
             {user.profileImage && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={user.profileImage} alt="" width={22} height={22} className="rounded-full" />
@@ -83,10 +83,10 @@ export function Topbar({ status, showLogout = false }: TopbarProps) {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={user.profileImage} alt="" width={24} height={24} className="rounded-full" />
             )}
-            <span className="text-[12px] text-[#666]">{user.username}</span>
+            <span className="text-[14px] text-[#666]">{user.username}</span>
             <button
               onClick={logout}
-              className="border border-[#222] hover:border-[#444] text-[#555] hover:text-[#999] text-[11px] px-3 py-1 rounded"
+              className="border border-[#222] hover:border-[#444] text-[#555] hover:text-[#999] text-[13px] px-3 py-1 rounded"
             >
               logout
             </button>

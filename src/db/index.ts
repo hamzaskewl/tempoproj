@@ -2,10 +2,11 @@ import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import * as schema from './schema.js'
 
-const DATABASE_URL = process.env.DATABASE_URL
+const raw = process.env.DATABASE_URL
+const DATABASE_URL = raw && URL.canParse(raw) ? raw : null
 
 if (!DATABASE_URL) {
-  console.warn('[db] DATABASE_URL not set — running without persistence (in-memory only)')
+  console.warn('[db] DATABASE_URL not set or invalid — running without persistence (in-memory only)')
 }
 
 const client = DATABASE_URL ? postgres(DATABASE_URL, { max: 10, connect_timeout: 30, onnotice: () => {} }) : null

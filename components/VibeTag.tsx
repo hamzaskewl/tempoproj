@@ -20,7 +20,7 @@ export function VibeTag({ vibe, className = '' }: { vibe: Vibe | string; classNa
   const style = VIBE_STYLES[vibe as Vibe] ?? VIBE_STYLES.neutral
   return (
     <span
-      className={`inline-block rounded text-[10px] font-medium px-2 py-[3px] text-center ${style} ${className}`}
+      className={`inline-block rounded text-[12px] font-medium px-2 py-[3px] text-center ${style} ${className}`}
     >
       {vibe}
     </span>

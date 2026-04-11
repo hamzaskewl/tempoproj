@@ -3,6 +3,8 @@ node_modules
 dist
 .claude
 .agents
+.agent
+.qodo
 server.log
 debug.log
 *.SKILL.md

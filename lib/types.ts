@@ -109,3 +109,41 @@ export interface ChannelStats {
   isSpike?: boolean
   jumpPercent?: number
 }
+
+export interface AdminStats {
+  auth: { totalUsers: number; availableInvites: number }
+  system: { totalChannels?: number; totalMsgsPerSec?: number }
+  llm: { spent: number; remaining: number; limit: number; totalCalls: number }
+}
+
+export interface InviteCode {
+  code: string
+  label?: string | null
+  useCount: number
+  maxUses: number
+  uses?: { usedByName: string }[]
+}
+
+export interface AdminUser {
+  id: string
+  username: string
+  role: 'admin' | 'user'
+  lastSeen: number
+  createdAt: number
+}
+
+export interface DetailedUser {
+  id: string
+  username: string
+  role: 'admin' | 'user'
+  lastSeen: number
+  createdAt: number
+  hasOAuth: boolean
+  clipsCreated: number
+  momentsTotal: number
+  channels: { channel: string; confirmed: boolean }[]
+}
+
+export interface WhitelistEntry {
+  username: string
+}

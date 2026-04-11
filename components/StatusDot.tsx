@@ -8,7 +8,7 @@ export function StatusDot({ live }: { live: boolean }) {
 
 export function StatusPill({ live, label }: { live: boolean; label: string }) {
   return (
-    <div className="flex items-center gap-[6px] text-[11px] text-[#555] px-[10px] py-1 border border-[#1a1a1a] rounded-full">
+    <div className="flex items-center gap-[8px] text-[13px] text-[#555] px-[12px] py-1 border border-[#1a1a1a] rounded-full">
       <StatusDot live={live} />
       <span>{label}</span>
     </div>

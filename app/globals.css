@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @theme {
+  --spacing: 0.3125rem;
   --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', ui-monospace, monospace;
   --color-bg-0: #0a0a0a;
   --color-bg-1: #0c0c0c;
@@ -23,34 +24,36 @@
   --color-discord: #5865F2;
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
 
-html,
-body {
-  background: var(--color-bg-0);
-  color: var(--color-text);
-  font-family: var(--font-mono);
-  min-height: 100vh;
-  -webkit-font-smoothing: antialiased;
-}
+  html,
+  body {
+    background: var(--color-bg-0);
+    color: var(--color-text);
+    font-family: var(--font-mono);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 
-button {
-  font-family: inherit;
-}
+  button {
+    font-family: inherit;
+  }
 
-input,
-select,
-textarea {
-  font-family: inherit;
+  input,
+  select,
+  textarea {
+    font-family: inherit;
+  }
 }
 
 .pulse {

@@ -22,7 +22,8 @@ export function useSSE(
 
   useEffect(() => {
     if (!enabled) return
-    const es = new EventSource(url)
+    const fullUrl = url.startsWith('/api/') ? url : `/api${url}`
+    const es = new EventSource(fullUrl)
     es.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data)
