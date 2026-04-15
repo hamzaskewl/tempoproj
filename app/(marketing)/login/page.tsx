@@ -8,6 +8,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   oauth_failed: 'Twitch OAuth failed. Try again.',
   user_fetch_failed: 'Could not fetch your Twitch profile.',
   server_error: 'Something went wrong. Try again.',
+  access_denied: 'You cancelled the Twitch login. Click below to retry.',
+  missing_code: 'Twitch did not return an authorization code. Try again.',
 }
 
 function LoginInner() {

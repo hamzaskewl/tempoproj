@@ -5,6 +5,7 @@ import { setTwitchAuth } from '@/src/clip'
 
 const TWITCH_CLIENT_ID = process.env.TWITCH_CLIENT_ID || ''
 const TWITCH_CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET || ''
+// See note in ../route.ts — leave unset in dev, set to public origin in prod.
 const BASE_URL = process.env.BASE_URL || ''
 
 export async function GET(request: Request) {
@@ -12,8 +13,18 @@ export async function GET(request: Request) {
   if (limited) return limited
 
   const url = new URL(request.url)
+
+  // Handle Twitch OAuth error responses (user denied, invalid scope, redirect_uri mismatch, etc.)
+  const oauthError = url.searchParams.get('error')
+  if (oauthError) {
+    const desc = url.searchParams.get('error_description') || ''
+    console.error(`[auth] Twitch OAuth error: ${oauthError} — ${desc}`)
+    const key = oauthError === 'access_denied' ? 'access_denied' : 'oauth_failed'
+    return NextResponse.redirect(new URL(`/login?error=${key}`, request.url))
+  }
+
   const code = url.searchParams.get('code')
-  if (!code) return new Response('Missing code', { status: 400 })
+  if (!code) return NextResponse.redirect(new URL('/login?error=missing_code', request.url))
 
   let inviteFromUrl = ''
   const stateParam = url.searchParams.get('state')
@@ -24,9 +35,14 @@ export async function GET(request: Request) {
     } catch {}
   }
 
-  const proto = request.headers.get('x-forwarded-proto') || url.protocol.replace(':', '')
-  const host = request.headers.get('host') || url.host
-  const origin = `${proto}://${host}`
+  let origin: string
+  if (BASE_URL) {
+    origin = BASE_URL.replace(/\/$/, '')
+  } else {
+    const proto = request.headers.get('x-forwarded-proto') || url.protocol.replace(':', '')
+    const host = request.headers.get('host') || url.host
+    origin = `${proto}://${host}`
+  }
   const redirect = `${origin}/api/auth/twitch/callback`
   const secure = isSecure(request)
 
