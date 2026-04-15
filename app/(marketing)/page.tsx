@@ -58,9 +58,9 @@ export default function HomePage() {
 
   return (
     <>
-      <Topbar status={{ live, label: live ? 'live' : 'connecting...' }} />
+      <Topbar status={{ live, label: live ? 'live' : 'connecting...' }} showLogout={authenticated} />
 
-      <div className="grid lg:grid-cols-[1fr_340px] min-h-[calc(100vh-53px)]">
+      <div className="grid lg:grid-cols-[1fr_440px] min-h-[calc(100vh-53px)]">
         {/* Main */}
         <div className="p-4 md:p-8 overflow-y-auto">
           <div className="mb-10">
@@ -123,14 +123,12 @@ export default function HomePage() {
                 trending.channels.map((ch) => (
                   <div
                     key={ch.channel}
-                    className="flex justify-between items-center px-5 py-4 bg-[#111] border border-[#161616] rounded-md text-[14px]"
+                    className="grid grid-cols-[minmax(0,1fr)_4ch_auto_90px] items-center gap-3 px-5 py-4 bg-[#111] border border-[#161616] rounded-md text-[14px]"
                   >
-                    <span className="font-medium text-white truncate max-w-[140px]">{ch.channel}</span>
-                    <span className="text-[#555] text-[13px] flex items-center">
-                      <b className="text-[#ccc]">{ch.burst}</b>
-                      <span className="ml-1">msg/s</span>
-                      <VibeTag vibe={ch.vibe} className="ml-[8px]" />
-                    </span>
+                    <span className="font-medium text-white truncate">{ch.channel}</span>
+                    <b className="text-[#ccc] text-[13px] text-right tabular-nums">{ch.burst}</b>
+                    <span className="text-[#555] text-[13px]">msg/s</span>
+                    <VibeTag vibe={ch.vibe} className="w-full" />
                   </div>
                 ))
               )}

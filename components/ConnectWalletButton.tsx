@@ -54,9 +54,9 @@ export function ConnectWalletButton() {
     return (
       <button
         onClick={() => setVisible(true)}
-        className="text-[13px] px-4 py-2 bg-[#1a1a1a] hover:bg-[#222] text-white border border-[#333] rounded transition-colors"
+        className="btn-purple text-[13px] py-[8px] px-4"
       >
-        Connect Phantom
+        connect wallet
       </button>
     )
   }
@@ -64,7 +64,7 @@ export function ConnectWalletButton() {
   return (
     <button
       onClick={() => disconnect()}
-      className="text-[13px] px-4 py-2 bg-[#111] hover:bg-[#181818] text-[#22c55e] border border-[#22c55e44] rounded transition-colors font-mono"
+      className="btn-purple text-[13px] py-[8px] px-4 font-mono"
       title="Click to disconnect"
     >
       {truncate(publicKey.toBase58())}

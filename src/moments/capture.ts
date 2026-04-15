@@ -1,4 +1,4 @@
-import { onSpike, getRecentMessages, getVodTimestamp, getVodUrl } from '../firehose/index'
+import { onSpike, getVodTimestamp, getVodUrl } from '../firehose/index'
 import { classifySpike } from '../summarize/index'
 import { createClip, hasTwitchAuth } from '../clip/index'
 import { memMoments, bumpMemId, saveMoment } from './queries'
@@ -21,8 +21,11 @@ export function startMomentCapture() {
     }
 
     const memId = bumpMemId()
-    const chatSnapshot = getRecentMessages(spike.channel, 50)
+    // v2 freezes chatSnapshot on the spike event at peak time; v1 sets it at trigger.
+    // Either way, prefer whatever the detector attached so classification sees the climax.
+    const chatSnapshot: string[] = Array.isArray(spike.chatSnapshot) ? spike.chatSnapshot : []
     const isWatched = watchedChannelsSet.has(spike.channel.toLowerCase())
+    const captureAt = typeof spike.peakAt === 'number' ? spike.peakAt : spike.spikeAt
 
     const ownerUsers = getUsersForChannel(spike.channel.toLowerCase())
     const primaryUserId = ownerUsers.length > 0 ? ownerUsers[0] : null
@@ -40,7 +43,9 @@ export function startMomentCapture() {
     }
 
     memMoments.push(moment)
-    console.log(`[moments] #${memId} captured: ${spike.channel} +${spike.jumpPercent}% (${spike.vibe})`)
+    const peakBurst = typeof spike.peakBurst === 'number' ? spike.peakBurst : spike.burst
+    const durationMs = typeof spike.durationMs === 'number' ? spike.durationMs : 0
+    console.log(`[moments] #${memId} captured: ${spike.channel} +${spike.jumpPercent}% (${spike.vibe}) peak=${peakBurst}msg/s dur=${Math.round(durationMs / 1000)}s det=${spike.detector}`)
 
     // For watched channels: classify with LLM + auto-clip
     if (isWatched) {
@@ -86,14 +91,15 @@ export function startMomentCapture() {
       }
     }
 
-    // Enrich with VOD timestamps
+    // Enrich with VOD timestamps — anchor to the peak, not the onset,
+    // so the clip window centers on the loudest point of the spike.
     try {
-      const vodTimestamp = await getVodTimestamp(spike.channel, spike.spikeAt)
+      const vodTimestamp = await getVodTimestamp(spike.channel, captureAt)
       if (vodTimestamp) {
         moment.vodTimestamp = vodTimestamp
         moment.vodUrl = await getVodUrl(spike.channel, vodTimestamp)
-        const startVod = await getVodTimestamp(spike.channel, spike.spikeAt - 10_000)
-        const endVod = await getVodTimestamp(spike.channel, spike.spikeAt + 30_000)
+        const startVod = await getVodTimestamp(spike.channel, captureAt - 10_000)
+        const endVod = await getVodTimestamp(spike.channel, captureAt + 30_000)
         moment.clipStart = startVod
         moment.clipEnd = endVod
         moment.clipStartUrl = startVod ? await getVodUrl(spike.channel, startVod) : null

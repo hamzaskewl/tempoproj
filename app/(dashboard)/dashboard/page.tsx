@@ -124,7 +124,7 @@ function DashboardInner() {
   return (
     <>
       <Topbar status={{ live, label: live ? 'live' : 'connecting...' }} showLogout />
-      <div className="grid lg:grid-cols-[1fr_340px] min-h-[calc(100vh-53px)]">
+      <div className="grid lg:grid-cols-[1fr_440px] min-h-[calc(100vh-53px)]">
         <div className="px-4 md:px-8 py-6 overflow-y-auto">
           <div className="bg-[#2a1800] border border-[#f59e0b55] rounded px-[18px] py-[12px] mb-3 text-[13px] leading-relaxed text-[#fbbf24]">
             <strong className="text-[#f59e0b]">heads up:</strong> clips are created using <strong>your Twitch account</strong> and will keep generating in the background even when your browser is closed. to stop, remove the channel from your watchlist below.
@@ -169,9 +169,11 @@ function DashboardInner() {
             <div className="text-[12px] font-medium uppercase tracking-[2px] text-[#444] mb-3">trending</div>
             <div className="flex flex-col gap-2">
               {!trending?.channels?.length ? <div className="text-[#1a1a1a] text-[14px] py-4 text-center">loading...</div> :
-                trending.channels.map((ch) => <div key={ch.channel} onClick={() => quickAdd(ch.channel.toLowerCase())} className="flex justify-between items-center px-5 py-4 bg-[#111] border border-[#161616] rounded-md text-[14px] cursor-pointer hover:border-[#333]">
-                  <span className="font-medium text-white truncate max-w-[140px]">{ch.channel}</span>
-                  <span className="text-[#555] text-[13px] flex items-center"><b className="text-[#ccc]">{ch.burst}</b><span className="ml-1">msg/s</span><VibeTag vibe={ch.vibe} className="ml-[8px]" /></span>
+                trending.channels.map((ch) => <div key={ch.channel} onClick={() => quickAdd(ch.channel.toLowerCase())} className="grid grid-cols-[minmax(0,1fr)_4ch_auto_90px] items-center gap-3 px-5 py-4 bg-[#111] border border-[#161616] rounded-md text-[14px] cursor-pointer hover:border-[#333]">
+                  <span className="font-medium text-white truncate">{ch.channel}</span>
+                  <b className="text-[#ccc] text-[13px] text-right tabular-nums">{ch.burst}</b>
+                  <span className="text-[#555] text-[13px]">msg/s</span>
+                  <VibeTag vibe={ch.vibe} className="w-full" />
                 </div>)}
             </div>
           </div>
@@ -179,7 +181,7 @@ function DashboardInner() {
             <div className="text-[12px] font-medium uppercase tracking-[2px] text-[#444] mb-3">account</div>
             <div className="bg-[#111] border border-[#161616] rounded-md p-[14px]">
               <div className="text-[13px] text-[#555] mb-[12px]">Clips are created using your Twitch OAuth. You can disconnect to stop all clip creation from your account.</div>
-              <button onClick={disconnectOAuth} disabled={oauthDisconnected} className="w-full bg-transparent border border-[#ef444444] text-[#ef4444] text-[12px] py-[8px] rounded disabled:border-[#222] disabled:text-[#333] disabled:cursor-not-allowed">{oauthDisconnected ? 'disconnected' : 'disconnect Twitch OAuth'}</button>
+              <button onClick={disconnectOAuth} disabled={oauthDisconnected} className="btn-red w-full text-[13px] py-[8px] px-4 disabled:opacity-50 disabled:cursor-not-allowed">{oauthDisconnected ? 'disconnected' : 'disconnect Twitch OAuth'}</button>
               <div className="text-[12px] text-[#333] mt-2 text-center">You can also revoke access at{' '}<a href="https://www.twitch.tv/settings/connections" target="_blank" rel="noreferrer" className="text-[#9146ff]">twitch.tv/settings/connections</a></div>
             </div>
           </div>

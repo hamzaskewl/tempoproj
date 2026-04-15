@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { WalletProviderClient } from '@/components/WalletProviderClient'
 
 export const metadata: Metadata = {
   title: 'clippy — real-time twitch stream intelligence',
@@ -13,7 +14,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <WalletProviderClient>{children}</WalletProviderClient>
+      </body>
     </html>
   )
 }

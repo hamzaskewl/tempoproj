@@ -13,6 +13,19 @@ export interface ChatMessage {
   }
 }
 
+export interface PendingSpike {
+  startedAt: number
+  peakBurst: number
+  peakZ: number
+  peakAt: number
+  triggerBaseline: number
+  triggerSustained: number
+  triggerRiseTicks: number
+  peakChatSnapshot: string[]
+  peakVibe: Vibe
+  peakVibeIntensity: number
+}
+
 export interface ChannelState {
   name: string
   messageTimes: { time: number, user: string }[]
@@ -30,7 +43,7 @@ export interface ChannelState {
   ewmaVar: number
   riseTicks: number
   fallTicks: number
-  pendingSpike: { startedAt: number; peakBurst: number; peakZ: number; peakAt: number } | null
+  pendingSpike: PendingSpike | null
 }
 
 export interface StreamContext {
@@ -39,8 +52,9 @@ export interface StreamContext {
   title: string | null
 }
 
-// v2 spike detector constants
-export const SPIKE_V2 = process.env.SPIKE_V2 === '1'
+// v2 spike detector constants.
+// v2 is now the default — set SPIKE_V2=0 to explicitly opt back into v1.
+export const SPIKE_V2 = process.env.SPIKE_V2 !== '0'
 export const ALPHA_MEAN = 0.05
 export const ALPHA_VAR = 0.02
 export const STDDEV_FLOOR = 0.25

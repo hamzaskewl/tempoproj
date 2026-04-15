@@ -92,6 +92,34 @@
   transform: none;
 }
 
+.btn-red {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 24px;
+  border: 0.5px solid rgba(255, 70, 70, 0.3);
+  border-radius: 9999px;
+  background: linear-gradient(to bottom, #ffa0a0, #ef4444, #fca5a5);
+  color: #4e0a0a;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+  box-shadow: 0 1px 3px rgba(239, 68, 68, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.btn-red:hover {
+  transform: scale(1.03);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  background: linear-gradient(to bottom, #ffb4b4, #f87171, #ffa0a0);
+}
+.btn-red:active {
+  transform: scale(0.97);
+  background: linear-gradient(to top, #ffa0a0, #ef4444, #fca5a5);
+  box-shadow: 0 1px 4px rgba(239, 68, 68, 0.5), inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
 .pulse {
   animation: pulse 1.5s ease-in-out infinite;
 }

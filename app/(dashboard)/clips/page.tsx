@@ -84,10 +84,10 @@ function ClipsInner() {
 
         <div className="flex gap-2 flex-wrap mb-8">
           {stats?.topChannels?.map((ch) => (
-            <div key={ch.channel} onClick={() => toggleFilter(ch.channel)}
-              className={`text-[13px] px-[18px] py-[8px] bg-[#111] border rounded-full cursor-pointer hover:border-[#333] hover:text-white ${filterChannel === ch.channel ? 'border-[#9146ff] text-[#9146ff]' : 'border-[#1a1a1a] text-[#888]'}`}>
-              {ch.channel}<span className="text-[#444] ml-1">{ch.count}</span>
-            </div>
+            <button key={ch.channel} onClick={() => toggleFilter(ch.channel)}
+              className={`btn-purple text-[13px] py-[8px] px-4 ${filterChannel === ch.channel ? '' : 'opacity-60'}`}>
+              {ch.channel}<span className="ml-1 opacity-70">{ch.count}</span>
+            </button>
           ))}
         </div>
 

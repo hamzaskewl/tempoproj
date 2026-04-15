@@ -13,10 +13,8 @@ export function PageButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`bg-[#1a1a1a] border rounded px-3 py-[8px] text-[13px] min-w-[32px] text-center hover:bg-[#222] hover:text-[#999] disabled:opacity-30 disabled:cursor-not-allowed ${
-        active
-          ? 'border-[#9146ff] text-[#9146ff] bg-[#1a0a2a]'
-          : 'border-[#222] text-[#666]'
+      className={`btn-purple text-[13px] py-[8px] px-4 min-w-[40px] disabled:opacity-40 disabled:cursor-not-allowed ${
+        active ? '' : 'opacity-60'
       }`}
     >
       {children}

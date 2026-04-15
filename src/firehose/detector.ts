@@ -142,52 +142,119 @@ setInterval(() => {
 
     if (isSpike) {
       const wasAlreadySpiking = state.lastSpikeAt && (now - state.lastSpikeAt) < 30_000
-      state.lastSpikeAt = now
-      if (state.burst > state.peakRate) state.peakRate = state.burst
 
-      if (!wasAlreadySpiking && spikeListeners.size > 0) {
-        const channelName = state.name
-        const burstSnap = state.burst, sustainedSnap = state.sustained
-        const baselineSnap = SPIKE_V2 ? state.ewmaMean : state.baseline
-        const zSnap = v2Z
-        const confidenceSnap = Math.max(0, Math.min(1, (v2Z - Z_TRIGGER) / 4))
-        const riseTicksSnap = state.riseTicks
-        if (SPIKE_V2) {
-          state.pendingSpike = { startedAt: now, peakBurst: burstSnap, peakZ: zSnap, peakAt: now }
+      if (SPIKE_V2) {
+        // v2: start tracking a pending spike; defer listener emission until
+        // the spike closes so the chat snapshot reflects the peak, not the onset.
+        if (!state.pendingSpike && !wasAlreadySpiking) {
+          state.lastSpikeAt = now
+          if (state.burst > state.peakRate) state.peakRate = state.burst
+          const vibes = getVibes(state)
+          state.pendingSpike = {
+            startedAt: now,
+            peakBurst: state.burst,
+            peakZ: v2Z,
+            peakAt: now,
+            triggerBaseline: state.ewmaMean,
+            triggerSustained: state.sustained,
+            triggerRiseTicks: state.riseTicks,
+            peakChatSnapshot: state.recentMessages.slice(-50).map(m => `${m.displayName}: ${m.text}`),
+            peakVibe: vibes.dominant,
+            peakVibeIntensity: vibes.intensity,
+          }
           state.fallTicks = 0
         }
-        getStreamContext(channelName).then(ctx => {
-          if (!ctx) return
-          const vibes = getVibes(state)
-          const chatSnapshot = state.recentMessages.slice(-50).map(m => `${m.displayName}: ${m.text}`)
-          const denom = baselineSnap > 0.01 ? baselineSnap : 0.01
-          const spike = {
-            channel: channelName, spikeAt: now, viewers: ctx.viewers,
-            burst: Math.round(burstSnap * 100) / 100, sustained: Math.round(sustainedSnap * 100) / 100,
-            baseline: Math.round(baselineSnap * 100) / 100,
-            jumpPercent: Math.round(((burstSnap - baselineSnap) / denom) * 100),
-            vibe: vibes.dominant, vibeIntensity: vibes.intensity, chatSnapshot,
-            game: ctx.game, streamTitle: ctx.title,
-            detector: SPIKE_V2 ? 'v2' : 'v1',
-            zScore: Math.round(zSnap * 100) / 100, confidence: Math.round(confidenceSnap * 100) / 100,
-            peakBurst: Math.round(burstSnap * 100) / 100, riseDurationMs: riseTicksSnap * 1000,
-          }
-          for (const listener of spikeListeners) listener(spike)
-        }).catch(() => {})
+      } else {
+        // v1: emit immediately (legacy behavior).
+        state.lastSpikeAt = now
+        if (state.burst > state.peakRate) state.peakRate = state.burst
+        if (!wasAlreadySpiking && spikeListeners.size > 0) {
+          const channelName = state.name
+          const burstSnap = state.burst, sustainedSnap = state.sustained
+          const baselineSnap = state.baseline
+          const riseTicksSnap = state.riseTicks
+          getStreamContext(channelName).then(ctx => {
+            if (!ctx) return
+            const vibes = getVibes(state)
+            const chatSnapshot = state.recentMessages.slice(-50).map(m => `${m.displayName}: ${m.text}`)
+            const denom = baselineSnap > 0.01 ? baselineSnap : 0.01
+            const spike = {
+              channel: channelName, spikeAt: now, peakAt: now, viewers: ctx.viewers,
+              burst: Math.round(burstSnap * 100) / 100, sustained: Math.round(sustainedSnap * 100) / 100,
+              baseline: Math.round(baselineSnap * 100) / 100,
+              jumpPercent: Math.round(((burstSnap - baselineSnap) / denom) * 100),
+              vibe: vibes.dominant, vibeIntensity: vibes.intensity, chatSnapshot,
+              game: ctx.game, streamTitle: ctx.title,
+              detector: 'v1',
+              zScore: 0, confidence: 0,
+              peakBurst: Math.round(burstSnap * 100) / 100,
+              durationMs: 0,
+              riseDurationMs: riseTicksSnap * 1000,
+            }
+            for (const listener of spikeListeners) listener(spike)
+          }).catch(() => {})
+        }
       }
     }
 
-    // v2 peak tracking
+    // v2 peak tracking + deferred emission
     if (SPIKE_V2 && state.pendingSpike) {
-      if (state.burst > state.pendingSpike.peakBurst) {
-        state.pendingSpike.peakBurst = state.burst
-        state.pendingSpike.peakZ = v2Z
-        state.pendingSpike.peakAt = now
+      const ps = state.pendingSpike
+      if (state.burst > ps.peakBurst) {
+        ps.peakBurst = state.burst
+        ps.peakZ = v2Z
+        ps.peakAt = now
+        // Freeze snapshot at the climax, not the onset — this is the whole
+        // point of peak-timed capture.
+        ps.peakChatSnapshot = state.recentMessages.slice(-50).map(m => `${m.displayName}: ${m.text}`)
+        const vibes = getVibes(state)
+        ps.peakVibe = vibes.dominant
+        ps.peakVibeIntensity = vibes.intensity
+        if (state.burst > state.peakRate) state.peakRate = state.burst
       }
-      if (state.burst < PEAK_FALLOFF * state.pendingSpike.peakBurst) state.fallTicks++
+      if (state.burst < PEAK_FALLOFF * ps.peakBurst) state.fallTicks++
       else state.fallTicks = 0
-      if (state.fallTicks >= 2 || now - state.pendingSpike.startedAt > 15_000) {
-        state.pendingSpike = null; state.fallTicks = 0
+
+      const isClosing = state.fallTicks >= 2 || now - ps.startedAt > 15_000
+      if (isClosing) {
+        const snapshot = ps
+        state.pendingSpike = null
+        state.fallTicks = 0
+
+        if (spikeListeners.size > 0) {
+          const channelName = state.name
+          getStreamContext(channelName).then(ctx => {
+            if (!ctx) return
+            const baselineSnap = snapshot.triggerBaseline
+            const burstSnap = snapshot.peakBurst
+            const zSnap = snapshot.peakZ
+            const confidenceSnap = Math.max(0, Math.min(1, (zSnap - Z_TRIGGER) / 4))
+            const denom = baselineSnap > 0.01 ? baselineSnap : 0.01
+            const durationMs = Math.max(0, snapshot.peakAt - snapshot.startedAt)
+            const spike = {
+              channel: channelName,
+              spikeAt: snapshot.startedAt,
+              peakAt: snapshot.peakAt,
+              viewers: ctx.viewers,
+              burst: Math.round(burstSnap * 100) / 100,
+              sustained: Math.round(snapshot.triggerSustained * 100) / 100,
+              baseline: Math.round(baselineSnap * 100) / 100,
+              jumpPercent: Math.round(((burstSnap - baselineSnap) / denom) * 100),
+              vibe: snapshot.peakVibe,
+              vibeIntensity: snapshot.peakVibeIntensity,
+              chatSnapshot: snapshot.peakChatSnapshot,
+              game: ctx.game,
+              streamTitle: ctx.title,
+              detector: 'v2',
+              zScore: Math.round(zSnap * 100) / 100,
+              confidence: Math.round(confidenceSnap * 100) / 100,
+              peakBurst: Math.round(burstSnap * 100) / 100,
+              durationMs,
+              riseDurationMs: snapshot.triggerRiseTicks * 1000,
+            }
+            for (const listener of spikeListeners) listener(spike)
+          }).catch(() => {})
+        }
       }
     }
 
