@@ -26,13 +26,13 @@ export async function GET() {
         'DELETE /api/my/channels/:channel': 'Remove channel from your slots',
         'POST /api/my/channels/:channel/confirm': 'Confirm channel (must be live)',
       },
-      paid_mpp: {
-        'POST /api/trending': { price: '$0.001', description: 'Full trending list' },
-        'POST /api/channel': { price: '$0.001', description: 'Channel stats + recent messages' },
-        'POST /api/spikes': { price: '$0.002', description: 'All active spikes with VOD links' },
-        'POST /api/summarize': { price: '$0.01', description: 'LLM summary of channel chat' },
-        'POST /api/moments': { price: '$0.001', description: 'List captured moments' },
-        'POST /api/watch/:channel': { price: '$0.03/spike', description: 'SSE stream with AI-classified spikes + auto-clipping' },
+      post: {
+        'POST /api/trending': 'Full trending list',
+        'POST /api/channel': 'Channel stats + recent messages',
+        'POST /api/spikes': 'All active spikes with VOD links',
+        'POST /api/summarize': 'LLM summary of channel chat',
+        'POST /api/moments': 'List captured moments',
+        'POST /api/watch/:channel': 'SSE stream with AI-classified spikes + auto-clipping',
       },
     },
   })

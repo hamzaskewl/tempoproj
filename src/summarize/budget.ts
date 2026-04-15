@@ -1,5 +1,5 @@
-import { db } from '../db/index.js'
-import { llmUsage } from '../db/schema.js'
+import { db } from '../db/index'
+import { llmUsage } from '../db/schema'
 import { eq } from 'drizzle-orm'
 
 // --- Direct Anthropic API (for dashboard users, free tier) ---

@@ -1,7 +1,7 @@
-import { setActiveChannel, removeActiveChannel, isStreamLive } from '../firehose/index.js'
-import { loadChannelEmotes } from '../tokenizer/index.js'
-import { db } from '../db/index.js'
-import { watchedChannels as watchedTable, userChannels as userChannelsTable } from '../db/schema.js'
+import { setActiveChannel, removeActiveChannel, isStreamLive } from '../firehose/index'
+import { loadChannelEmotes } from '../tokenizer/index'
+import { db } from '../db/index'
+import { watchedChannels as watchedTable, userChannels as userChannelsTable } from '../db/schema'
 import { eq, and, sql } from 'drizzle-orm'
 
 export interface UserChannel {

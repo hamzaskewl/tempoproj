@@ -102,7 +102,7 @@ function InviteInner() {
         <button
           disabled={code.length < 16}
           onClick={submit}
-          className="w-full px-6 py-[18px] bg-[#9146ff] hover:bg-[#7c3aed] text-white rounded-md text-[15px] font-semibold disabled:bg-[#1a1a1a] disabled:text-[#333] disabled:cursor-not-allowed"
+          className="btn-purple w-full py-[18px] text-[15px]"
         >
           verify &amp; enter
         </button>

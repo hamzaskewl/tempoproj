@@ -1,6 +1,6 @@
 // Emote fetching from 7TV, BTTV, FFZ APIs + Twitch ID resolution
 
-import { registerEmote, registerChannelEmote, knownEmotes } from './vibe-map.js'
+import { registerEmote, registerChannelEmote, knownEmotes } from './vibe-map'
 
 // --- Fetch emotes from 7TV/BTTV/FFZ APIs ---
 

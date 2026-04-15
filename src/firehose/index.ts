@@ -1,13 +1,13 @@
 // Re-export everything from submodules
-export type { ChatMessage, ChannelState, StreamContext } from './state.js'
-export type { Vibe, VibeScores } from './state.js'
+export type { ChatMessage, ChannelState, StreamContext } from './state'
+export type { Vibe, VibeScores } from './state'
 export {
   channels,
   setActiveChannel,
   removeActiveChannel,
   isActiveChannel,
   getOrCreateChannel,
-} from './state.js'
+} from './state'
 
 export {
   getTrending,
@@ -16,7 +16,7 @@ export {
   getRecentMessages,
   isConnected,
   getStats,
-} from './queries.js'
+} from './queries'
 
 export {
   getStreamContext,
@@ -25,10 +25,10 @@ export {
   getVodTimestamp,
   getVodUrl,
   isStreamLive,
-} from './stream.js'
+} from './stream'
 
-export { onSpike } from './detector.js'
-export { connectFirehose } from './connection.js'
+export { onSpike } from './detector'
+export { connectFirehose } from './connection'
 
 // Import detector to ensure side effects (setInterval loops) run on module load
-import './detector.js'
+import './detector'

@@ -24,11 +24,11 @@ export function MomentCard({
     <>
       <div
         onClick={onToggle}
-        className={`grid grid-cols-[1fr_auto] md:grid-cols-[140px_70px_60px_1fr_80px] items-center gap-3 px-4 py-[18px] bg-[#111] border border-[#161616] rounded-md text-[14px] cursor-pointer hover:bg-[#151515] hover:border-[#222] transition-colors ${
+        className={`grid grid-cols-[1fr_auto] md:grid-cols-[160px_80px_90px_1fr_100px] items-center gap-5 px-5 py-[18px] bg-[#111] border border-[#161616] rounded-md text-[14px] cursor-pointer hover:bg-[#151515] hover:border-[#222] transition-colors ${
           m.clipUrl ? 'border-l-[3px] border-l-[#22c55e]' : ''
         }`}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <span className="font-semibold text-white text-[15px]">{m.channel}</span>
           {m.viewers ? <span className="text-[#444] text-[12px]">{(m.viewers / 1000).toFixed(1)}k</span> : null}
         </div>

@@ -71,7 +71,7 @@ export default function HomePage() {
           </div>
 
           {/* Stats grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-9">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-9">
             <StatCard val={formatNumber(health?.totalChannels)} label="channels tracked" sub="live right now" />
             <StatCard val={health?.totalMsgsPerSec?.toFixed(0) ?? '-'} label="messages / sec" sub="across all channels" />
             <StatCard val={formatNumber(stats?.moments?.total)} label="moments captured" sub="all-time" />
@@ -80,7 +80,7 @@ export default function HomePage() {
 
           {/* Live spike feed */}
           <SectionTitle count={spikes.length}>live activity</SectionTitle>
-          <div className="flex flex-col gap-1 mb-8">
+          <div className="flex flex-col gap-2 mb-8">
             {spikes.length === 0 ? (
               <div className="text-[#1a1a1a] text-[14px] py-8 text-center">
                 <span className="pulse">listening for spikes...</span>
@@ -100,7 +100,7 @@ export default function HomePage() {
                 {stats.moments.topChannels.slice(0, 8).map((ch, i) => (
                   <div
                     key={ch.channel}
-                    className="flex justify-between items-center px-3 py-3 text-[14px] border-b border-[#111] last:border-b-0"
+                    className="flex justify-between items-center px-5 py-4 text-[14px] border-b border-[#111] last:border-b-0"
                   >
                     <span className="text-[#333] w-6">{i + 1}</span>
                     <span className="text-white font-medium flex-1">{ch.channel}</span>
@@ -116,14 +116,14 @@ export default function HomePage() {
         <div className="border-t lg:border-t-0 lg:border-l border-[#141414] p-4 md:p-6 overflow-y-auto bg-[#0c0c0c]">
           <div className="mb-7">
             <SectionTitle>trending now</SectionTitle>
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-2">
               {!trending?.channels?.length ? (
                 <div className="text-[#1a1a1a] text-[14px] py-4 text-center">loading...</div>
               ) : (
                 trending.channels.map((ch) => (
                   <div
                     key={ch.channel}
-                    className="flex justify-between items-center px-[18px] py-[12px] bg-[#111] border border-[#161616] rounded-md text-[14px]"
+                    className="flex justify-between items-center px-5 py-4 bg-[#111] border border-[#161616] rounded-md text-[14px]"
                   >
                     <span className="font-medium text-white truncate max-w-[140px]">{ch.channel}</span>
                     <span className="text-[#555] text-[13px] flex items-center">
@@ -144,10 +144,7 @@ export default function HomePage() {
                 <p className="text-[13px] text-[#555] mb-4 leading-relaxed">
                   manage your 3 channel slots, see your clips, and monitor live activity.
                 </p>
-                <Link
-                  href="/dashboard"
-                  className="inline-block bg-[#9146ff] hover:bg-[#7c3aed] text-white text-[13px] font-semibold px-6 py-[12px] rounded-md"
-                >
+                <Link href="/dashboard" className="btn-purple text-[13px]">
                   go to dashboard
                 </Link>
               </>
@@ -157,10 +154,7 @@ export default function HomePage() {
                 <p className="text-[13px] text-[#555] mb-4 leading-relaxed">
                   sign up to monitor up to 3 live channels. clippy will detect highlights and create clips on your twitch account automatically.
                 </p>
-                <Link
-                  href="/login"
-                  className="inline-block bg-[#9146ff] hover:bg-[#7c3aed] text-white text-[13px] font-semibold px-6 py-[12px] rounded-md"
-                >
+                <Link href="/login" className="btn-purple text-[13px]">
                   get started
                 </Link>
               </>

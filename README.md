@@ -62,7 +62,7 @@ The LLM returns:
 - **User management** — admin can revoke users, delete invite codes
 - **VOD deep-links** — direct links to exact VOD timestamps
 - **Trending sidebar** — top channels by burst rate across all of Twitch
-- **MPP API** — pay-per-use endpoints for programmatic access via Tempo micropayments
+- **Solana prediction markets** — every classified moment is reported on-chain to a trustlessly-settled binary market
 - **Postgres persistence** — moments, clips, user channels, LLM budget all survive restarts
 - **Twitch token auto-refresh** — OAuth tokens persist in DB, refresh automatically on startup + every 3 hours
 - **Rate limiting** — auth endpoints rate-limited to prevent abuse
@@ -96,7 +96,12 @@ ADMIN_TWITCH=             # Twitch username that gets admin role automatically
 # Optional
 LLM_BUDGET_USD=20         # Max LLM spend before auto-pause (default $20)
 PORT=3000                 # Server port
-WALLET_ADDRESS=           # Tempo wallet for MPP payments
+
+# Solana prediction market (optional — Phase 2 / Phase 3)
+HELIUS_KEY=               # Helius RPC API key
+SOLANA_ORACLE_KEYPAIR_BASE64=
+CLIPPY_PROGRAM_ID=
+USDC_MINT=
 ```
 
 ---
@@ -104,26 +109,22 @@ WALLET_ADDRESS=           # Tempo wallet for MPP payments
 ## Project structure
 
 ```
-src/
-  index.ts          Express server, routes, auth, MPP payment setup
-  firehose.ts       Twitch chat WebSocket, rate analysis, spike detection, stream context
-  moments.ts        Moment capture, per-user channel management (3 slots), DB persistence
-  clip.ts           Twitch clip creation, OAuth token persistence + auto-refresh
-  summarize.ts      Claude Haiku classification, system prompt, budget tracking
-  auth.ts           User auth, sessions, invite codes, whitelist, TOS
-  db/
-    schema.ts       Drizzle ORM schema (users, moments, channels, tokens, invites, whitelist)
-    index.ts        Database init, auto-migration on startup
+app/
+  (marketing)/      Landing, docs, login, invite pages
+  (dashboard)/      Dashboard, admin, clips, markets
+  api/              Next.js route handlers
 
-public/
-  index.html        Landing page — public stats, live spike feed, trending
-  dashboard.html    Per-user dashboard — channel slots, moments, clip embeds
-  clips.html        Clip directory with pagination + "my channels" filter
-  admin.html        Admin panel — invite codes, users, whitelist, LLM budget
-  login.html        Twitch OAuth login with TOS consent
-  invite.html       Invite code entry (supports auto-fill from URL)
-  docs.html         API documentation
-  llms.txt          LLM-readable service manifest
+src/
+  firehose/         Twitch WebSocket, rate analysis, spike detection
+  moments/          Spike capture, per-user channel management, DB persistence
+  clip/             Twitch clip creation, OAuth token persistence + auto-refresh
+  summarize/        Claude Haiku classification, system prompt, budget tracking
+  auth/             Users, sessions, invite codes, whitelist, TOS
+  oracle/           Solana oracle — signs attestations + manages rolling markets
+  db/               Drizzle ORM schema + init
+
+programs/clippy_market/
+                    Anchor program — binary prediction markets settled via Ed25519 sig verify
 ```
 
 ---
@@ -156,27 +157,26 @@ public/
 | `GET` | `/channel-stats/:name` | Live channel rates |
 | `POST` | `/clip/:id` | Create a Twitch clip for a moment |
 
-### Paid endpoints (Tempo MPP, USDC)
+### POST endpoints
 
-| Method | Endpoint | Cost | Description |
-|--------|----------|------|-------------|
-| `POST` | `/trending` | $0.001 | Full trending list |
-| `POST` | `/channel` | $0.001 | Channel stats + chat |
-| `POST` | `/spikes` | $0.002 | All active spikes with VOD links |
-| `POST` | `/summarize` | $0.01 | LLM summary of channel chat |
-| `POST` | `/moments` | $0.001 | Query captured moments |
-| `POST` | `/watch/:channel` | $0.03/spike | Live AI-classified spikes + auto-clip |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/trending` | Full trending list |
+| `POST` | `/channel` | Channel stats + chat |
+| `POST` | `/spikes` | All active spikes with VOD links |
+| `POST` | `/summarize` | LLM summary of channel chat |
+| `POST` | `/moments` | Query captured moments |
+| `POST` | `/watch/:channel` | SSE stream of AI-classified spikes + auto-clip |
 
 ---
 
 ## Tech stack
 
-- **Runtime** — Node.js, Express 5, TypeScript
+- **Runtime** — Node.js, Next.js 15 App Router, TypeScript
 - **AI** — Claude Haiku 4.5 (Anthropic API)
 - **Database** — PostgreSQL + Drizzle ORM
-- **Payments** — Tempo MPP, Viem, USDC on Tempo Chain
+- **Chain** — Solana (Anchor program, Ed25519 sigverify, USDC-SPL), Helius RPC
 - **Twitch** — Helix API, OAuth 2.0, GQL for stream context
-- **Frontend** — Vanilla JS, SSE, dark monospace UI
 - **Hosting** — Railway ([clippy.build](https://clippy.build/))
 
 ---

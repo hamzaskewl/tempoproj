@@ -63,7 +63,7 @@ export function Topbar({ status, showLogout = false }: TopbarProps) {
         {!showLogout && !authenticated && (
           <Link
             href="/login"
-            className="bg-[#9146ff] hover:bg-[#7c3aed] text-white text-[13px] font-semibold px-4 py-[8px] rounded-md"
+            className="btn-purple text-[13px] py-[8px] px-4"
           >
             login
           </Link>

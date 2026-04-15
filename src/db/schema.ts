@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, real, boolean, json, serial, bigint } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, integer, real, boolean, json, serial, bigint, primaryKey } from 'drizzle-orm/pg-core'
 
 export const users = pgTable('users', {
   id: text('id').primaryKey(),                    // Twitch user ID
@@ -94,3 +94,25 @@ export const userChannels = pgTable('user_channels', {
   confirmed: boolean('confirmed').notNull().default(false),
   confirmedAt: timestamp('confirmed_at'),
 })
+
+export const marketsCache = pgTable('markets_cache', {
+  pda: text('pda').primaryKey(),                          // Market PDA base58
+  channel: text('channel').notNull(),
+  mood: text('mood').notNull(),
+  windowStart: bigint('window_start', { mode: 'number' }).notNull(),
+  windowEnd: bigint('window_end', { mode: 'number' }).notNull(),
+  state: text('state').notNull(),                         // 'open' | 'yes' | 'no'
+  totalYes: bigint('total_yes', { mode: 'bigint' }).notNull().default(0n),
+  totalNo:  bigint('total_no',  { mode: 'bigint' }).notNull().default(0n),
+  resolvedAt: bigint('resolved_at', { mode: 'number' }),
+  syncedAt: timestamp('synced_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
+export const userWallets = pgTable('user_wallets', {
+  userId: text('user_id').notNull().references(() => users.id),
+  walletAddress: text('wallet_address').notNull(),
+  linkedAt: timestamp('linked_at').defaultNow().notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.userId, t.walletAddress] }),
+}))

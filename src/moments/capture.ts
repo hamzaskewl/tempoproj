@@ -1,9 +1,9 @@
-import { onSpike, getRecentMessages, getVodTimestamp, getVodUrl } from '../firehose/index.js'
-import { classifySpikeDirect, classifySpike, hasDirectAPI } from '../summarize/index.js'
-import { createClip, hasTwitchAuth } from '../clip/index.js'
-import { memMoments, bumpMemId, saveMoment } from './queries.js'
-import { watchedChannelsSet, getUsersForChannel } from './channels.js'
-import type { Moment } from './queries.js'
+import { onSpike, getRecentMessages, getVodTimestamp, getVodUrl } from '../firehose/index'
+import { classifySpike } from '../summarize/index'
+import { createClip, hasTwitchAuth } from '../clip/index'
+import { memMoments, bumpMemId, saveMoment } from './queries'
+import { watchedChannelsSet, getUsersForChannel } from './channels'
+import type { Moment } from './queries'
 
 // Auto-capture moments when spikes happen
 export function startMomentCapture() {
@@ -51,13 +51,24 @@ export function startMomentCapture() {
           streamTitle: (spike as any).streamTitle || null,
           viewers: spike.viewers || null,
         }
-        const classify = hasDirectAPI() ? classifySpikeDirect : classifySpike
-        const result = await classify(chatSnapshot, context)
+        const result = await classifySpike(chatSnapshot, context)
         if (result) {
           moment.mood = result.mood
           moment.description = result.description
           moment.clipWorthy = result.clipWorthy
           console.log(`[moments] #${memId} LLM: ${result.mood} / clipWorthy=${result.clipWorthy} — "${result.description}"`)
+
+          // Notify prediction market — signed attestation locks + resolves any matching open market
+          try {
+            const oracle = await import('../oracle/index')
+            await oracle.reportMoodFired({
+              channel: spike.channel,
+              mood: result.mood,
+              spikeAt: spike.spikeAt,
+            })
+          } catch (err: any) {
+            console.error(`[moments] #${memId} oracle report failed:`, err?.message || err)
+          }
 
           if (result.clipWorthy && hasTwitchAuth()) {
             const clip = await createClip(spike.channel, primaryUserId || undefined)

@@ -25,7 +25,7 @@ export function AdminWhitelist({
         />
         <button
           onClick={onAddWhitelist}
-          className="bg-[#9146ff] hover:bg-[#7c3aed] text-white text-[14px] font-semibold px-5 py-[12px] rounded"
+          className="btn-purple text-[14px] px-5 py-[12px]"
         >
           add
         </button>

@@ -1,6 +1,6 @@
 import crypto from 'crypto'
-import { db } from '../db/index.js'
-import { inviteCodes as inviteCodesTable, inviteCodeUses as inviteCodeUsesTable, whitelist as whitelistTable } from '../db/schema.js'
+import { db } from '../db/index'
+import { inviteCodes as inviteCodesTable, inviteCodeUses as inviteCodeUsesTable, whitelist as whitelistTable } from '../db/schema'
 import { eq, desc } from 'drizzle-orm'
 
 // --- Types ---

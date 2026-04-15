@@ -1,8 +1,8 @@
 // Core tokenization, scoring, and message analysis
 
-import type { Vibe } from './vibe-map.js'
-import { VIBE_MAP, EMOJI_VIBES, knownEmotes } from './vibe-map.js'
-import type { VibeScores } from './vibe-map.js'
+import type { Vibe } from './vibe-map'
+import { VIBE_MAP, EMOJI_VIBES, knownEmotes } from './vibe-map'
+import type { VibeScores } from './vibe-map'
 
 export type TokenType = 'emote' | 'word' | 'emoji' | 'punctuation' | 'mention' | 'url'
 

@@ -56,6 +56,42 @@
   }
 }
 
+.btn-purple {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 24px;
+  border: 0.5px solid rgba(145, 70, 255, 0.3);
+  border-radius: 9999px;
+  background: linear-gradient(to bottom, #c9a0ff, #9146ff, #c084fc);
+  color: #2d0a4e;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+  box-shadow: 0 1px 3px rgba(145, 70, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.btn-purple:hover {
+  transform: scale(1.03);
+  box-shadow: 0 2px 8px rgba(145, 70, 255, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  background: linear-gradient(to bottom, #d4b0ff, #a855f7, #c9a0ff);
+}
+.btn-purple:active {
+  transform: scale(0.97);
+  background: linear-gradient(to top, #c9a0ff, #9146ff, #c084fc);
+  box-shadow: 0 1px 4px rgba(145, 70, 255, 0.5), inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.btn-purple:disabled {
+  background: #1a1a1a;
+  color: #333;
+  border-color: #222;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
 .pulse {
   animation: pulse 1.5s ease-in-out infinite;
 }

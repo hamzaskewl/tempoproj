@@ -1,6 +1,6 @@
 // Vibe scoring data, emote/word dictionaries, and registration helpers
 
-import type { Vibe } from '../../lib/types.js'
+import type { Vibe } from '../../lib/types'
 export type { Vibe }
 
 export interface VibeScores {

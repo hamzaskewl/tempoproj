@@ -13,3 +13,4 @@ debug.log
 .next
 out
 next-env.d.ts
+tsconfig.tsbuildinfo

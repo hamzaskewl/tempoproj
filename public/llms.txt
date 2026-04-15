@@ -1,5 +1,5 @@
 # Clippy — Real-time Twitch Stream Intelligence API
-> Detects chat spikes, classifies moments with AI, and auto-clips highlights. Pay-per-use via MPP — no API keys, no signup.
+> Detects chat spikes, classifies moments with AI, and auto-clips highlights. Open API — no API keys, no signup.
 
 Base URL: https://stream-intel-production.up.railway.app
 
@@ -9,11 +9,11 @@ Base URL: https://stream-intel-production.up.railway.app
 2. Per-channel rate tracking detects spikes (5s burst vs 30s baseline). Only channels with 3000+ viewers trigger spike events.
 3. On watched channels, Claude classifies the mood (hype, funny, rage, clutch, awkward, wholesome, drama, shock, sad) and describes what happened in one sentence.
 4. Every spike on a watched channel auto-creates a Twitch clip. The AI description becomes the clip title.
-5. All paid endpoints use Tempo MPP — agents pay with USDC on Tempo chain. No API keys needed.
+5. Classified moments are reported on-chain to a Solana program that settles binary prediction markets trustlessly.
 
-## Free Endpoints (no payment required)
+## Free Endpoints
 
-- GET /api — Service info, all endpoints with prices
+- GET /api — Service info, all endpoints
 - GET /health — Status: connected, channel count, msg/s
 - GET /trending — Top 10 channels by chat burst rate
 - GET /alerts — SSE stream of real-time spike events. Query param: ?channel=name to filter
@@ -23,25 +23,22 @@ Base URL: https://stream-intel-production.up.railway.app
 - GET /moments/:id/classify — Trigger LLM classification on a moment (returns mood + description)
 - GET /clip/:id — Embeddable clip page with Twitch player at the spike timestamp
 
-## Paid Endpoints (MPP charge per request)
+## POST Endpoints
 
-- POST /trending ($0.001) — Full trending list with custom limit. Body: {"limit": 20}
-- POST /channel ($0.001) — Full stats for one channel including recent messages. Body: {"channel": "caseoh_"}
-- POST /spikes ($0.002) — All channels currently spiking, enriched with VOD timestamps. Body: {"withinMinutes": 5}
-- POST /summarize ($0.01) — LLM-powered summary of channel chat (sentiment, topics). Body: {"channel": "caseoh_"}
-- POST /moments ($0.001) — List captured spike moments. Body: {"channel": "caseoh_", "clipWorthyOnly": true, "limit": 20}
+- POST /trending — Full trending list with custom limit. Body: {"limit": 20}
+- POST /channel — Full stats for one channel including recent messages. Body: {"channel": "caseoh_"}
+- POST /spikes — All channels currently spiking, enriched with VOD timestamps. Body: {"withinMinutes": 5}
+- POST /summarize — LLM-powered summary of channel chat (sentiment, topics). Body: {"channel": "caseoh_"}
+- POST /moments — List captured spike moments. Body: {"channel": "caseoh_", "clipWorthyOnly": true, "limit": 20}
+- POST /watch/:channel — SSE stream with LLM-classified spikes + auto-clipping. Auto-closes ~2 min after stream goes offline.
 
-## Session Endpoint (streaming payment)
-
-- POST /watch/:channel ($0.03/spike) — SSE stream with LLM-classified spikes + auto-clipping. Opens payment channel, $0.03 deducted per spike via off-chain voucher. Unused deposit refunded on close. Auto-closes ~2 min after stream goes offline.
-
-## Watchlist (controls auto-clipping, free)
+## Watchlist (controls auto-clipping)
 
 - POST /watch-clip/:channel — Add channel to auto-clip watchlist (enables LLM classification + Twitch clipping)
 - DELETE /watch-clip/:channel — Remove from watchlist
 - GET /watch-clip — List watched channels
 
-## Channel Tracking (lightweight rate tracking, free)
+## Channel Tracking (lightweight rate tracking)
 
 - POST /track/:channel — Start tracking a channel's chat rate
 - DELETE /track/:channel — Stop tracking
@@ -54,27 +51,23 @@ Base URL: https://stream-intel-production.up.railway.app
 ## Quick Start
 
 ```bash
-# Install tempo CLI
-curl -fsSL https://tempo.xyz/install.sh | sh
-tempo wallet login
+# See what's trending
+curl https://stream-intel-production.up.railway.app/trending
 
-# See what's trending (free)
-tempo request https://stream-intel-production.up.railway.app/trending
-
-# Get channel stats (pays $0.001)
-tempo request -X POST -H "Content-Type: application/json" \
+# Get channel stats
+curl -X POST -H "Content-Type: application/json" \
   -d '{"channel": "caseoh_"}' \
   https://stream-intel-production.up.railway.app/channel
 
-# Listen for spikes on a channel (free SSE)
+# Listen for spikes on a channel (SSE)
 curl -N https://stream-intel-production.up.railway.app/alerts?channel=caseoh_
 
-# Watch a channel with AI classification ($0.03/spike)
-tempo request -X POST \
+# Watch a channel with AI classification
+curl -N -X POST \
   https://stream-intel-production.up.railway.app/watch/caseoh_
 
 # Get latest moment
-tempo request https://stream-intel-production.up.railway.app/moments/latest/caseoh_
+curl https://stream-intel-production.up.railway.app/moments/latest/caseoh_
 ```
 
 ## Spike Event Format (from /alerts or /watch)
@@ -115,13 +108,3 @@ tempo request https://stream-intel-production.up.railway.app/moments/latest/case
   "baseline": 12.7
 }
 ```
-
-## Payment
-
-All paid endpoints use Tempo MPP (https://mpp.dev). Two models:
-- Charge: agent sends request, gets 402, pays USDC on Tempo chain, gets response. One tx per request.
-- Session: agent deposits USDC into escrow, $0.03 deducted per spike via off-chain voucher, unused deposit auto-refunded on close.
-
-Recipient wallet: 0xfaad4f22fc6259646c8925203a04020e5458da6d
-Currency: USDC on Tempo (0x20c000000000000000000000b9537d11c60e8b50)
-Chain: Tempo mainnet (chain ID 4217)

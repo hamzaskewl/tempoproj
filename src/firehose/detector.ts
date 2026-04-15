@@ -1,12 +1,12 @@
-import { analyzeMessage } from '../tokenizer/index.js'
-import { getStreamContext } from './stream.js'
+import { analyzeMessage } from '../tokenizer/index'
+import { getStreamContext } from './stream'
 import {
   channels, activeChannels, getOrCreateChannel, getVibes,
   setTotalMsgsPerSec,
   SPIKE_V2, ALPHA_MEAN, ALPHA_VAR, STDDEV_FLOOR, Z_TRIGGER,
   RISE_TICKS_REQUIRED, PEAK_FALLOFF, WARMUP_SAMPLES,
   type ChatMessage, type ChannelState,
-} from './state.js'
+} from './state'
 
 // Per-user rate limiting — drop spam before it hits the tokenizer
 const userMsgTimes = new Map<string, number[]>()

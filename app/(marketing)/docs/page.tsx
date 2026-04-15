@@ -35,13 +35,12 @@ function FlowStep({ num, children }: { num: number; children: React.ReactNode })
   )
 }
 
-const Tag = ({ kind, label }: { kind: 'mpp' | 'twitch' | 'llm'; label: string }) => {
+const Tag = ({ kind, label }: { kind: 'twitch' | 'llm'; label: string }) => {
   const cls = {
-    mpp: 'bg-[#1a0a1a] text-[#c084fc]',
-    twitch: 'bg-[#0a0a1a] text-[#a78bfa]',
-    llm: 'bg-[#1a1a0a] text-[#fbbf24]',
+    twitch: 'from-[#ddd6fe] via-[#a78bfa] to-[#ddd6fe] text-[#2e1065] border-[#a78bfa33]',
+    llm: 'from-[#fde68a] via-[#fbbf24] to-[#fde68a] text-[#78350f] border-[#fbbf2433]',
   }[kind]
-  return <span className={`inline-block text-[12px] px-[8px] py-[2px] rounded mr-1 ${cls}`}>{label}</span>
+  return <span className={`inline-block text-[12px] font-semibold px-[10px] py-[2px] rounded-full bg-gradient-to-b border-[0.5px] shadow-sm mr-1 ${cls}`}>{label}</span>
 }
 
 export default function DocsPage() {
@@ -69,7 +68,7 @@ export default function DocsPage() {
         <p className="text-[16px] text-[#999]">
           Real-time Twitch stream intelligence. Detects chat spikes, classifies moments with AI, and auto-clips highlights.
         </p>
-        <p className="text-[15px] text-[#555] mt-1">Pay-per-use via MPP. No API keys needed.</p>
+        <p className="text-[15px] text-[#555] mt-1">Open API. Solana-settled prediction markets on stream moments.</p>
       </div>
 
       <h2 className="text-[16px] font-semibold text-white mt-8 mb-3">How it works</h2>
@@ -89,8 +88,7 @@ export default function DocsPage() {
         Every spike on a watched channel auto-creates a Twitch clip. The LLM description becomes the clip title.
       </FlowStep>
       <FlowStep num={5}>
-        <Tag kind="mpp" label="MPP" />
-        All paid endpoints use Tempo MPP — agents pay with USDC, no API keys.
+        Every classified moment is reported on-chain to a Solana program that settles binary prediction markets trustlessly.
       </FlowStep>
 
       <hr className="border-0 border-t border-[#1a1a1a] my-10" />
@@ -108,17 +106,15 @@ export default function DocsPage() {
       <Endpoint method="GET" path="/api/channel-stats/:name" price="free" priceClass="text-[#22c55e]" />
       <Endpoint method="GET" path="/api/clip/:id" price="free" priceClass="text-[#22c55e]" />
 
-      <h3 className="text-[14px] font-medium text-[#888] uppercase tracking-wider mt-5 mb-2">Charge (one-off payment)</h3>
-      <Endpoint method="POST" path="/api/trending" price="$0.001" />
-      <Endpoint method="POST" path="/api/channel" price="$0.001" />
-      <Endpoint method="POST" path="/api/spikes" price="$0.002" />
-      <Endpoint method="POST" path="/api/summarize" price="$0.01" />
-      <Endpoint method="POST" path="/api/moments" price="$0.001" />
-
-      <h3 className="text-[14px] font-medium text-[#888] uppercase tracking-wider mt-5 mb-2">Session (streaming payment)</h3>
-      <Endpoint method="POST" path="/api/watch/:channel" price="$0.03/spike" priceClass="text-[#c084fc]" />
+      <h3 className="text-[14px] font-medium text-[#888] uppercase tracking-wider mt-5 mb-2">POST</h3>
+      <Endpoint method="POST" path="/api/trending" price="free" priceClass="text-[#22c55e]" />
+      <Endpoint method="POST" path="/api/channel" price="free" priceClass="text-[#22c55e]" />
+      <Endpoint method="POST" path="/api/spikes" price="free" priceClass="text-[#22c55e]" />
+      <Endpoint method="POST" path="/api/summarize" price="free" priceClass="text-[#22c55e]" />
+      <Endpoint method="POST" path="/api/moments" price="free" priceClass="text-[#22c55e]" />
+      <Endpoint method="POST" path="/api/watch/:channel" price="SSE" priceClass="text-[#22c55e]" />
       <div className="text-[13px] text-[#555] px-3 py-2 bg-[#0d0d0d] border-l-2 border-[#333] my-2 rounded-r">
-        Opens an SSE stream. Deposit USDC upfront, $0.03 deducted per spike via off-chain voucher. Unused deposit refunded on close. Auto-closes when the stream goes offline (~2 min after streamer ends).
+        Opens an SSE stream of AI-classified spikes for a channel. Auto-closes when the stream goes offline (~2 min after streamer ends).
       </div>
 
       <h3 className="text-[14px] font-medium text-[#888] uppercase tracking-wider mt-5 mb-2">Twitch auth + clips</h3>
@@ -129,10 +125,7 @@ export default function DocsPage() {
 
       <h2 className="text-[16px] font-semibold text-white mt-8 mb-3">Stack</h2>
       <p className="text-[14px] text-[#555]">
-        Twitch chat firehose → Next.js → mppx (Tempo MPP) → Claude (mood classification) → Twitch Helix API (auto-clip)
-      </p>
-      <p className="text-[14px] text-[#555] mt-2">
-        Deployed on Railway. Built at Tempo HQ, SF — MPP Hackathon (Tempo x Stripe).
+        Twitch chat firehose → Next.js → Claude Haiku (mood classification) → Twitch Helix API (auto-clip) → Solana (prediction market settlement)
       </p>
     </div>
   )

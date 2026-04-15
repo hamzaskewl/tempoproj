@@ -1,9 +1,9 @@
 import crypto from 'crypto'
-import { db } from '../db/index.js'
-import { users as usersTable, sessions as sessionsTable, inviteCodes as inviteCodesTable } from '../db/schema.js'
+import { db } from '../db/index'
+import { users as usersTable, sessions as sessionsTable, inviteCodes as inviteCodesTable } from '../db/schema'
 import { eq } from 'drizzle-orm'
-import { getUser, memUsers } from './users.js'
-import type { User } from './users.js'
+import { getUser, memUsers } from './users'
+import type { User } from './users'
 
 // --- Types ---
 export interface Session {
@@ -170,7 +170,7 @@ export async function getAuthStats() {
     }
   }
   // Import memInviteCodes lazily to avoid circular dependency at load time
-  const { memInviteCodes } = await import('./invites.js')
+  const { memInviteCodes } = await import('./invites')
   return {
     totalUsers: memUsers.size,
     activeSessions: memSessions.size,

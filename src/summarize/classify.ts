@@ -1,5 +1,5 @@
-import { anthropicFetch, mppFetchWithRetry } from './summarize.js'
-import { ANTHROPIC_MODEL } from './budget.js'
+import { anthropicFetch } from './summarize'
+import { ANTHROPIC_MODEL } from './budget'
 
 export const CLASSIFY_SYSTEM_PROMPT = `You are clippy, an AI clip detector for Twitch streams. Your job is to analyze chat activity spikes and determine what just happened on stream.
 
@@ -28,7 +28,6 @@ export interface ClassifyContext {
 
 // Build the user message for classification — spike messages first, context last
 export function buildClassifyMessage(chatSnapshot: string[], context?: ClassifyContext): string {
-  // Split: last ~40% are the spike messages (the burst), rest is context before
   const spikeCount = Math.max(5, Math.ceil(chatSnapshot.length * 0.4))
   const contextMessages = chatSnapshot.slice(0, -spikeCount)
   const spikeMessages = chatSnapshot.slice(-spikeCount)
@@ -51,57 +50,7 @@ export function buildClassifyMessage(chatSnapshot: string[], context?: ClassifyC
   return msg
 }
 
-// Quick spike classification via MPP (paid endpoint for agents)
 export async function classifySpike(chatSnapshot: string[], context?: ClassifyContext): Promise<{
-  mood: string
-  description: string
-  clipWorthy: boolean
-} | null> {
-  if (chatSnapshot.length === 0) return null
-
-  const userMsg = buildClassifyMessage(chatSnapshot, context)
-
-  const body = {
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 150,
-    system: CLASSIFY_SYSTEM_PROMPT,
-    messages: [
-      { role: 'user', content: userMsg },
-    ],
-  }
-
-  try {
-    const res = await mppFetchWithRetry('https://anthropic.mpp.tempo.xyz/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-
-    const result = await res.text()
-    if (!res.ok) {
-      console.error(`[classify] HTTP ${res.status}: ${result.substring(0, 200)}`)
-      return null
-    }
-    const response = JSON.parse(result)
-    const text = response.content?.[0]?.text || ''
-
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0])
-      return {
-        mood: parsed.mood || 'unknown',
-        description: parsed.description || '',
-        clipWorthy: !!parsed.clipWorthy,
-      }
-    }
-    return null
-  } catch (err: any) {
-    console.error('[classify] Error:', err.message)
-    return null
-  }
-}
-
-export async function classifySpikeDirect(chatSnapshot: string[], context?: ClassifyContext): Promise<{
   mood: string
   description: string
   clipWorthy: boolean
@@ -132,7 +81,7 @@ export async function classifySpikeDirect(chatSnapshot: string[], context?: Clas
     }
     return null
   } catch (err: any) {
-    console.error('[classify-direct] Error:', err.message)
+    console.error('[classify] Error:', err.message)
     return null
   }
 }

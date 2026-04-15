@@ -1,11 +1,13 @@
-import { analyzeMessage } from '../tokenizer/index.js'
+import { analyzeMessage } from '../tokenizer/index'
 import {
   channels, totalMsgsPerSec, connected, getVibes,
   SPIKE_V2, STDDEV_FLOOR, Z_TRIGGER, WARMUP_SAMPLES, RISE_TICKS_REQUIRED,
-} from './state.js'
+} from './state'
+import type { ChannelState } from './state'
 
 export function getTrending(limit = 20) {
-  const sorted = [...channels.values()]
+  const ch: Map<string, ChannelState> = (globalThis as any).__firehose_channels ?? channels
+  const sorted = [...ch.values()]
     .map(ch => {
       const vibes = getVibes(ch)
       return {
@@ -19,11 +21,13 @@ export function getTrending(limit = 20) {
     })
     .sort((a, b) => b.burst - a.burst)
     .slice(0, limit)
-  return { channels: sorted, totalMsgsPerSec: Math.round(totalMsgsPerSec * 100) / 100 }
+  const msgs = (globalThis as any).__firehose_totalMsgsPerSec ?? totalMsgsPerSec
+  return { channels: sorted, totalMsgsPerSec: Math.round(msgs * 100) / 100 }
 }
 
 export function getChannel(name: string) {
-  const state = channels.get(name) || channels.get(name.toLowerCase())
+  const ch: Map<string, ChannelState> = (globalThis as any).__firehose_channels ?? channels
+  const state = ch.get(name) || ch.get(name.toLowerCase())
   if (!state) return null
   const baseline = SPIKE_V2 ? state.ewmaMean : state.baseline
   const stddev = Math.sqrt(state.ewmaVar) + STDDEV_FLOOR
@@ -61,8 +65,9 @@ export function getChannel(name: string) {
 }
 
 export function getSpikes(withinMinutes = 5) {
+  const ch: Map<string, ChannelState> = (globalThis as any).__firehose_channels ?? channels
   const cutoff = Date.now() - withinMinutes * 60_000
-  return [...channels.values()]
+  return [...ch.values()]
     .filter(ch => ch.lastSpikeAt && ch.lastSpikeAt > cutoff)
     .map(ch => {
       const vibes = getVibes(ch)
@@ -88,19 +93,24 @@ export function getSpikes(withinMinutes = 5) {
 }
 
 export function getRecentMessages(channelName: string, limit = 100): string[] {
-  const state = channels.get(channelName) || channels.get(channelName.toLowerCase())
+  const ch: Map<string, ChannelState> = (globalThis as any).__firehose_channels ?? channels
+  const state = ch.get(channelName) || ch.get(channelName.toLowerCase())
   if (!state) return []
   return state.recentMessages.slice(-limit)
     .filter(m => !analyzeMessage(m.text).giftSub)
     .map(m => `${m.displayName}: ${m.text}`)
 }
 
-export function isConnected() { return connected }
+export function isConnected() { return (globalThis as any).__firehose_connected ?? connected }
 
 export function getStats() {
+  const g = globalThis as any
+  const conn = g.__firehose_connected ?? connected
+  const msgs = g.__firehose_totalMsgsPerSec ?? totalMsgsPerSec
+  const ch: Map<string, ChannelState> = g.__firehose_channels ?? channels
   return {
-    connected,
-    totalChannels: channels.size,
-    totalMsgsPerSec: Math.round(totalMsgsPerSec * 100) / 100,
+    connected: conn,
+    totalChannels: ch.size,
+    totalMsgsPerSec: Math.round(msgs * 100) / 100,
   }
 }

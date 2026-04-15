@@ -157,7 +157,7 @@ function DashboardInner() {
               {channelOptions.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2">
             {filteredMoments.length === 0
               ? <div className="text-[#1a1a1a] text-[14px] py-8 text-center"><span className="pulse">{userChannels.filter((c) => c.confirmed).length === 0 ? 'add and confirm channels to start watching' : `watching ${userChannels.filter((c) => c.confirmed).map((c) => c.channel).join(', ')} — no moments yet`}</span></div>
               : filteredMoments.map((s) => <MomentCard key={s.id} m={s} open={expandedId === s.id} embedVisible={embedVisible.has(s.id)} onToggle={() => setExpandedId(expandedId === s.id ? null : s.id)} onToggleEmbed={() => { setEmbedVisible((cur) => { const next = new Set(cur); if (next.has(s.id)) next.delete(s.id); else next.add(s.id); return next }) }} />)}
@@ -167,9 +167,9 @@ function DashboardInner() {
           <ConfirmedChannelStats channels={userChannels.filter((c) => c.confirmed)} />
           <div className="mb-7">
             <div className="text-[12px] font-medium uppercase tracking-[2px] text-[#444] mb-3">trending</div>
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-2">
               {!trending?.channels?.length ? <div className="text-[#1a1a1a] text-[14px] py-4 text-center">loading...</div> :
-                trending.channels.map((ch) => <div key={ch.channel} onClick={() => quickAdd(ch.channel.toLowerCase())} className="flex justify-between items-center px-[18px] py-[12px] bg-[#111] border border-[#161616] rounded-md text-[14px] cursor-pointer hover:border-[#333]">
+                trending.channels.map((ch) => <div key={ch.channel} onClick={() => quickAdd(ch.channel.toLowerCase())} className="flex justify-between items-center px-5 py-4 bg-[#111] border border-[#161616] rounded-md text-[14px] cursor-pointer hover:border-[#333]">
                   <span className="font-medium text-white truncate max-w-[140px]">{ch.channel}</span>
                   <span className="text-[#555] text-[13px] flex items-center"><b className="text-[#ccc]">{ch.burst}</b><span className="ml-1">msg/s</span><VibeTag vibe={ch.vibe} className="ml-[8px]" /></span>
                 </div>)}

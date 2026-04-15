@@ -1,4 +1,4 @@
-import type { StreamContext } from './state.js'
+import type { StreamContext } from './state'
 
 // Stream context cache
 const streamContextCache = new Map<string, { ctx: StreamContext; cachedAt: number }>()

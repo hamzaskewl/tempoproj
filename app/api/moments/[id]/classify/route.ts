@@ -1,6 +1,6 @@
 import { requireAuth } from '@/src/middleware-helpers'
 import { getMomentById } from '@/src/moments'
-import { classifySpike, classifySpikeDirect, hasDirectAPI } from '@/src/summarize'
+import { classifySpike } from '@/src/summarize'
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await requireAuth(request)
@@ -10,8 +10,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const moment = await getMomentById(parseInt(id))
   if (!moment) return Response.json({ error: 'Moment not found' }, { status: 404 })
 
-  const classify = hasDirectAPI() ? classifySpikeDirect : classifySpike
-  const result = await classify(moment.chatSnapshot)
+  const result = await classifySpike(moment.chatSnapshot)
   if (result) {
     moment.mood = result.mood
     moment.description = result.description

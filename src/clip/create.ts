@@ -1,4 +1,4 @@
-import { TWITCH_CLIENT_ID, tokenCache, legacyUserId, getTokenForUser, refreshUserToken } from './tokens.js'
+import { TWITCH_CLIENT_ID, tokenCache, legacyUserId, getTokenForUser, refreshUserToken } from './tokens'
 
 // Broadcaster ID cache
 const broadcasterCache = new Map<string, { id: string; cachedAt: number }>()

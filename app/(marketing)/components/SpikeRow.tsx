@@ -26,10 +26,10 @@ export function SpikeRow({ spike }: { spike: LiveSpike }) {
   const jc = jumpClass(spike.jumpPercent)
   const jumpColor = jc === 'mega' ? 'text-[#f59e0b]' : jc === 'high' ? 'text-[#22c55e]' : ''
   return (
-    <div className="grid grid-cols-[1fr_auto] md:grid-cols-[140px_70px_70px_1fr_80px] items-center gap-3 px-4 py-3 bg-[#111] border border-[#161616] rounded-md text-[14px]">
+    <div className="grid grid-cols-[1fr_auto] md:grid-cols-[160px_80px_90px_1fr_100px] items-center gap-5 px-5 py-4 bg-[#111] border border-[#161616] rounded-md text-[14px]">
       <div>
         <span className="font-semibold text-white">{spike.channel}</span>
-        {spike.viewers ? <span className="text-[#444] text-[12px] ml-1">{formatViewers(spike.viewers)}</span> : null}
+        {spike.viewers ? <span className="text-[#444] text-[12px] ml-2">{formatViewers(spike.viewers)}</span> : null}
       </div>
       <span className={`font-bold ${jumpColor}`}>+{spike.jumpPercent}%</span>
       <VibeTag vibe={spike.vibe} className="hidden md:inline-block" />

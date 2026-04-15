@@ -1,5 +1,5 @@
-export type { Vibe, VibeScores } from '../tokenizer/index.js'
-import type { Vibe, VibeScores } from '../tokenizer/index.js'
+export type { Vibe, VibeScores } from '../tokenizer/index'
+import type { Vibe, VibeScores } from '../tokenizer/index'
 
 export interface ChatMessage {
   channel: string
@@ -49,16 +49,29 @@ export const RISE_TICKS_REQUIRED = 2
 export const PEAK_FALLOFF = 0.7
 export const WARMUP_SAMPLES = 20
 
-// Shared mutable state
-export const channels = new Map<string, ChannelState>()
-export let totalMsgsPerSec = 0
-export let connected = false
+// Shared mutable state — stored on globalThis so it survives Next.js module
+// duplication between instrumentation and API route bundles.
+interface FirehoseGlobals {
+  __firehose_channels: Map<string, ChannelState>
+  __firehose_totalMsgsPerSec: number
+  __firehose_connected: boolean
+  __firehose_activeChannels: Set<string>
+}
+const g = globalThis as unknown as Partial<FirehoseGlobals>
+if (!g.__firehose_channels) g.__firehose_channels = new Map<string, ChannelState>()
+if (g.__firehose_totalMsgsPerSec == null) g.__firehose_totalMsgsPerSec = 0
+if (g.__firehose_connected == null) g.__firehose_connected = false
+if (!g.__firehose_activeChannels) g.__firehose_activeChannels = new Set<string>()
 
-export function setTotalMsgsPerSec(v: number) { totalMsgsPerSec = v }
-export function setConnected(v: boolean) { connected = v }
+export const channels = g.__firehose_channels!
+export let totalMsgsPerSec = g.__firehose_totalMsgsPerSec!
+export let connected = g.__firehose_connected!
+
+export function setTotalMsgsPerSec(v: number) { totalMsgsPerSec = v; (globalThis as any).__firehose_totalMsgsPerSec = v }
+export function setConnected(v: boolean) { connected = v; (globalThis as any).__firehose_connected = v }
 
 // Active channel tracking
-const activeChannels = new Set<string>()
+const activeChannels = g.__firehose_activeChannels!
 export function setActiveChannel(name: string) { activeChannels.add(name.toLowerCase()) }
 export function removeActiveChannel(name: string) { activeChannels.delete(name.toLowerCase()) }
 export function isActiveChannel(name: string) { return activeChannels.has(name.toLowerCase()) }

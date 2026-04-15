@@ -1,6 +1,6 @@
 import WebSocket from 'ws'
-import { setConnected, type ChatMessage } from './state.js'
-import { processMessage } from './detector.js'
+import { setConnected, type ChatMessage } from './state'
+import { processMessage } from './detector'
 
 export function connectFirehose(instance = 'logs.spanix.team') {
   const url = `wss://${instance}/firehose?jsonBasic=true`

@@ -1,7 +1,7 @@
-import { db } from '../db/index.js'
-import { users as usersTable, sessions as sessionsTable } from '../db/schema.js'
+import { db } from '../db/index'
+import { users as usersTable, sessions as sessionsTable } from '../db/schema'
 import { eq, desc } from 'drizzle-orm'
-import { memSessions } from './sessions.js'
+import { memSessions } from './sessions'
 
 // --- Types ---
 export interface User {

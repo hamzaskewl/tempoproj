@@ -1,5 +1,5 @@
-import { db } from '../db/index.js'
-import { moments as momentsTable } from '../db/schema.js'
+import { db } from '../db/index'
+import { moments as momentsTable } from '../db/schema'
 import { eq, desc, and, sql } from 'drizzle-orm'
 
 export interface Moment {

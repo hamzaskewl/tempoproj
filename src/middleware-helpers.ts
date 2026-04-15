@@ -1,5 +1,5 @@
-import { parseSessionToken, validateSession, checkRateLimit } from './auth/index.js'
-import type { User } from './auth/index.js'
+import { parseSessionToken, validateSession, checkRateLimit } from './auth'
+import type { User } from './auth'
 
 export async function getAuthUser(request: Request): Promise<User | null> {
   const cookie = request.headers.get('cookie') ?? undefined

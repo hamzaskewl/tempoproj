@@ -1,5 +1,5 @@
-import { db } from '../db/index.js'
-import { twitchTokens } from '../db/schema.js'
+import { db } from '../db/index'
+import { twitchTokens } from '../db/schema'
 import { eq } from 'drizzle-orm'
 
 export const TWITCH_CLIENT_ID = process.env.TWITCH_CLIENT_ID || ''

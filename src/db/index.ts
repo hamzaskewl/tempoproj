@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
-import * as schema from './schema.js'
+import * as schema from './schema'
 
 const raw = process.env.DATABASE_URL
 const DATABASE_URL = raw && URL.canParse(raw) ? raw : null
@@ -150,6 +150,33 @@ async function _initTables() {
         username TEXT PRIMARY KEY,
         added_by TEXT NOT NULL,
         added_at TIMESTAMP DEFAULT NOW() NOT NULL
+      )
+    `
+
+    await client`
+      CREATE TABLE IF NOT EXISTS markets_cache (
+        pda TEXT PRIMARY KEY,
+        channel TEXT NOT NULL,
+        mood TEXT NOT NULL,
+        window_start BIGINT NOT NULL,
+        window_end BIGINT NOT NULL,
+        state TEXT NOT NULL,
+        total_yes BIGINT NOT NULL DEFAULT 0,
+        total_no BIGINT NOT NULL DEFAULT 0,
+        resolved_at BIGINT,
+        synced_at TIMESTAMP DEFAULT NOW() NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
+      )
+    `
+    try { await client`CREATE INDEX IF NOT EXISTS idx_markets_cache_state ON markets_cache (state)` } catch {}
+    try { await client`CREATE INDEX IF NOT EXISTS idx_markets_cache_channel_mood ON markets_cache (channel, mood)` } catch {}
+
+    await client`
+      CREATE TABLE IF NOT EXISTS user_wallets (
+        user_id TEXT NOT NULL,
+        wallet_address TEXT NOT NULL,
+        linked_at TIMESTAMP DEFAULT NOW() NOT NULL,
+        PRIMARY KEY (user_id, wallet_address)
       )
     `
 
