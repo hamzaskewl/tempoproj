@@ -1,4 +1,4 @@
-import { MarketsList } from '../components/MarketsList'
+import { ChannelSplitView } from './ChannelSplitView'
 
 export default async function ChannelMarketsPage({
   params,
@@ -6,5 +6,5 @@ export default async function ChannelMarketsPage({
   params: Promise<{ channel: string }>
 }) {
   const { channel } = await params
-  return <MarketsList channel={channel} />
+  return <ChannelSplitView channel={channel} />
 }

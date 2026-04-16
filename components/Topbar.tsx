@@ -55,6 +55,8 @@ export function Topbar({ status, showLogout = false }: TopbarProps) {
           {navLink('/', 'home')}
           {navLink('/dashboard', 'dashboard')}
           {navLink('/clips', 'clips')}
+          {navLink('/markets', 'markets')}
+          {navLink('/portfolio', 'portfolio')}
           {isAdmin && navLink('/admin', 'admin')}
         </nav>
       </div>
