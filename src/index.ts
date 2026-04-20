@@ -8,8 +8,8 @@ import { Mppx, tempo } from 'mppx/express'
 import { createClient, http } from 'viem'
 import { tempo as tempoChain } from 'viem/chains'
 import { connectFirehose, getTrending, getChannel, getSpikes, getStats, isConnected, getVodTimestamp, getVodUrl, isStreamLive, onSpike, getViewerCount, setActiveChannel, removeActiveChannel } from './firehose.js'
-import { summarizeChannel, classifySpike, classifySpikeDirect, summarizeChannelDirect, getLLMBudget, hasDirectAPI, restoreLLMUsage } from './summarize.js'
-import { startMomentCapture, getMoments, getMomentById, getMomentsByUser, watchChannel, unwatchChannel, getWatchedChannels, getMomentStats, getClippedMoments, getClippedMomentsCount, initWatchedChannels, getUserChannels, addUserChannel, removeUserChannel, confirmUserChannel } from './moments.js'
+import { summarizeChannel, classifySpike, classifySpikeDirect, summarizeChannelDirect, getLLMBudget, hasDirectAPI, restoreLLMUsage, setLLMBudgetLimit, resetLLMUsage } from './summarize.js'
+import { startMomentCapture, getMoments, getMomentById, getMomentsByUser, watchChannel, unwatchChannel, getWatchedChannels, getMomentStats, getClippedMoments, getClippedMomentsCount, initWatchedChannels, getUserChannels, addUserChannel, removeUserChannel, confirmUserChannel, isMomentsPaused, setMomentsPaused } from './moments.js'
 import { loadGlobalEmotes } from './tokenizer.js'
 import { setTwitchAuth, getTwitchAuth, createClip, restoreTwitchAuth, revokeTwitchAuth } from './clip.js'
 import { createUser, getUser, createSession, validateSession, destroySession, generateInviteCode, validateInviteCode, redeemInviteCode, getInviteCodes, getAllUsers, isAdmin, isDesignatedAdmin, checkRateLimit, getSessionCookie, clearSessionCookie, parseSessionToken, getAuthStats, createPendingRegistration, consumePendingRegistration, deleteUser, deleteInviteCode, addToWhitelist, removeFromWhitelist, getWhitelist, isWhitelisted, loadWhitelist } from './auth.js'
@@ -285,11 +285,59 @@ app.get('/admin/budget', requireAdmin, (_req, res) => {
   res.json(getLLMBudget())
 })
 
+// --- Admin: update LLM budget limit ---
+app.post('/admin/budget', requireAdmin, async (req, res) => {
+  const { limit } = req.body || {}
+  const n = parseFloat(limit)
+  if (!Number.isFinite(n) || n < 0 || n > 1_000_000) {
+    return res.status(400).json({ error: 'Invalid limit (must be between 0 and 1,000,000)' })
+  }
+  try {
+    await setLLMBudgetLimit(n)
+    res.json(getLLMBudget())
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// --- Admin: reset LLM usage counters ---
+app.post('/admin/budget/reset', requireAdmin, async (_req, res) => {
+  try {
+    await resetLLMUsage()
+    res.json(getLLMBudget())
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// --- Admin: system pause state ---
+app.get('/admin/system', requireAdmin, (_req, res) => {
+  res.json({ paused: isMomentsPaused() })
+})
+
+app.post('/admin/system/pause', requireAdmin, async (_req, res) => {
+  try {
+    await setMomentsPaused(true)
+    res.json({ paused: true })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/admin/system/resume', requireAdmin, async (_req, res) => {
+  try {
+    await setMomentsPaused(false)
+    res.json({ paused: false })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 app.get('/admin/stats', requireAdmin, async (_req, res) => {
   const auth = await getAuthStats()
   const llm = getLLMBudget()
   const system = getStats()
-  res.json({ auth, llm, system })
+  res.json({ auth, llm, system, paused: isMomentsPaused() })
 })
 
 // --- Admin: delete user ---

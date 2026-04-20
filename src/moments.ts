@@ -3,7 +3,7 @@ import { classifySpikeDirect, classifySpike, hasDirectAPI } from './summarize.js
 import { createClip, hasTwitchAuth } from './clip.js'
 import { loadChannelEmotes } from './tokenizer.js'
 import { db } from './db/index.js'
-import { moments as momentsTable, watchedChannels as watchedTable, userChannels as userChannelsTable } from './db/schema.js'
+import { moments as momentsTable, watchedChannels as watchedTable, userChannels as userChannelsTable, settings as settingsTable } from './db/schema.js'
 import { eq, desc, and, sql } from 'drizzle-orm'
 
 export interface Moment {
@@ -52,7 +52,38 @@ const memUserChannels = new Map<string, UserChannel[]>()
 
 const MAX_USER_CHANNELS = 3
 
+// Global pause flag — when true, spike handler bails early (no LLM, no clips, no moments saved).
+// Channels stay in user_channels + firehose keeps tracking, so resume is instant.
+let momentsPaused = false
+
+export function isMomentsPaused(): boolean {
+  return momentsPaused
+}
+
+export async function setMomentsPaused(paused: boolean): Promise<void> {
+  momentsPaused = paused
+  if (db) {
+    await db.insert(settingsTable).values({
+      key: 'moments_paused', value: paused ? '1' : '0',
+    }).onConflictDoUpdate({
+      target: settingsTable.key,
+      set: { value: paused ? '1' : '0', updatedAt: new Date() },
+    })
+  }
+  console.log(`[moments] ${paused ? 'PAUSED' : 'RESUMED'} — spike processing ${paused ? 'disabled' : 'active'}`)
+}
+
+async function loadMomentsPaused() {
+  if (!db) return
+  try {
+    const rows = await db.select().from(settingsTable).where(eq(settingsTable.key, 'moments_paused'))
+    if (rows.length > 0) momentsPaused = rows[0].value === '1'
+    if (momentsPaused) console.log('[moments] Restored PAUSED state — spike processing disabled')
+  } catch {}
+}
+
 export async function initWatchedChannels() {
+  await loadMomentsPaused()
   if (db) {
     // Clear stale global watched_channels — user_channels is the source of truth now
     await db.delete(watchedTable)
@@ -316,6 +347,7 @@ export function startMomentCapture() {
 
   onSpike(async (spike) => {
     if (spike.jumpPercent < 40) return
+    if (momentsPaused) return
 
     const memId = nextMemId++
     const chatSnapshot = getRecentMessages(spike.channel, 50)

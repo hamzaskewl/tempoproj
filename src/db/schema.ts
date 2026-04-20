@@ -94,3 +94,9 @@ export const userChannels = pgTable('user_channels', {
   confirmed: boolean('confirmed').notNull().default(false),
   confirmedAt: timestamp('confirmed_at'),
 })
+
+export const settings = pgTable('settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})

@@ -4,7 +4,7 @@ import { createWalletClient, http } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { tempo as tempoChain } from 'viem/chains'
 import { db } from './db/index.js'
-import { llmUsage } from './db/schema.js'
+import { llmUsage, settings as settingsTable } from './db/schema.js'
 import { eq } from 'drizzle-orm'
 
 // --- Direct Anthropic API (for dashboard users, free tier) ---
@@ -16,7 +16,7 @@ const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
 let totalInputTokens = 0
 let totalOutputTokens = 0
 let totalCalls = 0
-const BUDGET_LIMIT_USD = parseFloat(process.env.LLM_BUDGET_USD || '20')
+let budgetLimitUSD = parseFloat(process.env.LLM_BUDGET_USD || '20')
 
 function estimateCostUSD(): number {
   // Haiku 4.5 pricing: $0.80/1M input, $4/1M output
@@ -27,19 +27,48 @@ export function getLLMBudget() {
   const spent = estimateCostUSD()
   return {
     spent: Math.round(spent * 10000) / 10000,
-    limit: BUDGET_LIMIT_USD,
-    remaining: Math.round((BUDGET_LIMIT_USD - spent) * 10000) / 10000,
+    limit: budgetLimitUSD,
+    remaining: Math.round((budgetLimitUSD - spent) * 10000) / 10000,
     totalCalls,
     totalInputTokens,
     totalOutputTokens,
   }
 }
 
-function isBudgetExhausted(): boolean {
-  return estimateCostUSD() >= BUDGET_LIMIT_USD
+export async function setLLMBudgetLimit(limit: number): Promise<void> {
+  if (!Number.isFinite(limit) || limit < 0) throw new Error('Invalid limit')
+  budgetLimitUSD = limit
+  if (db) {
+    await db.insert(settingsTable).values({
+      key: 'llm_budget_usd', value: String(limit),
+    }).onConflictDoUpdate({
+      target: settingsTable.key,
+      set: { value: String(limit), updatedAt: new Date() },
+    })
+  }
+  console.log(`[llm] Budget limit set to $${limit}`)
 }
 
-// Restore LLM usage from DB
+export async function resetLLMUsage(): Promise<void> {
+  totalInputTokens = 0
+  totalOutputTokens = 0
+  totalCalls = 0
+  if (db) {
+    await db.insert(llmUsage).values({
+      id: 'global', totalInputTokens: 0, totalOutputTokens: 0, totalCalls: 0,
+    }).onConflictDoUpdate({
+      target: llmUsage.id,
+      set: { totalInputTokens: 0, totalOutputTokens: 0, totalCalls: 0, updatedAt: new Date() },
+    })
+  }
+  console.log('[llm] Usage counters reset to zero')
+}
+
+function isBudgetExhausted(): boolean {
+  return estimateCostUSD() >= budgetLimitUSD
+}
+
+// Restore LLM usage + budget override from DB
 export async function restoreLLMUsage() {
   if (!db) return
   try {
@@ -49,6 +78,14 @@ export async function restoreLLMUsage() {
       totalOutputTokens = rows[0].totalOutputTokens
       totalCalls = rows[0].totalCalls
       console.log(`[llm] Restored usage: ${totalCalls} calls, $${estimateCostUSD().toFixed(4)} spent`)
+    }
+    const budgetRow = await db.select().from(settingsTable).where(eq(settingsTable.key, 'llm_budget_usd'))
+    if (budgetRow.length > 0) {
+      const parsed = parseFloat(budgetRow[0].value)
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        budgetLimitUSD = parsed
+        console.log(`[llm] Restored budget override: $${budgetLimitUSD}`)
+      }
     }
   } catch (err: any) {
     console.error('[llm] Failed to restore usage:', err.message)
